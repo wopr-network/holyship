@@ -12,9 +12,12 @@
  * runtime, not compiled by the main build.
  */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { LinearClient } from "@linear/sdk";
-import { execFileSync } from "node:child_process";
 import type { Entity } from "../src/repositories/interfaces.js";
+
+const execFileAsync = promisify(execFile);
 
 export interface BlockingGraphResult {
   passed: boolean;
@@ -59,39 +62,51 @@ export async function isUnblocked(entity: Entity): Promise<BlockingGraphResult> 
   const unmerged: string[] = [];
 
   for (const relation of blockers) {
-    const relatedIssue = await relation.relatedIssue;
-    if (!relatedIssue) continue;
-
-    const identifier = relatedIssue.identifier;
-
-    // Resolve the PR via Linear attachment — the attachment URL tells us which repo
-    const attachments = await relatedIssue.attachments();
-    const prAttachment = attachments.nodes.find(
-      (a) => a.url?.includes("github.com") && a.url?.includes("/pull/"),
-    );
-    if (!prAttachment?.url) {
-      unmerged.push(`${identifier} (no PR found)`);
-      continue;
-    }
-    const match = prAttachment.url.match(
-      /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/,
-    );
-    if (!match) {
-      unmerged.push(`${identifier} (unrecognized PR URL)`);
-      continue;
-    }
-    const [, repo, prNum] = match;
     try {
-      const state = execFileSync(
-        "gh",
-        ["pr", "view", prNum, "--repo", repo, "--json", "state", "--jq", ".state"],
-        { encoding: "utf-8", timeout: 10000 },
-      ).trim();
-      if (state !== "MERGED") {
-        unmerged.push(identifier);
+      const blockerIssue = await relation.issue;
+      if (!blockerIssue) continue;
+
+      const identifier = blockerIssue.identifier;
+
+      // Resolve the PR via Linear attachment — the attachment URL tells us which repo
+      const attachments = await blockerIssue.attachments();
+      const prAttachment = attachments.nodes.find((a) => {
+        if (!a.url) return false;
+        let hostname: string;
+        try {
+          hostname = new URL(a.url).hostname;
+        } catch {
+          return false;
+        }
+        return hostname === "github.com" && a.url.includes("/pull/");
+      });
+      if (!prAttachment?.url) {
+        unmerged.push(`${identifier} (no PR found)`);
+        continue;
       }
-    } catch {
-      unmerged.push(`${identifier} (gh check failed)`);
+      const match = prAttachment.url.match(
+        /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/,
+      );
+      if (!match) {
+        unmerged.push(`${identifier} (unrecognized PR URL)`);
+        continue;
+      }
+      const [, repo, prNum] = match;
+      try {
+        const { stdout } = await execFileAsync(
+          "gh",
+          ["pr", "view", prNum, "--repo", repo, "--json", "state", "--jq", ".state"],
+          { timeout: 10000 },
+        );
+        if (stdout.trim() !== "MERGED") {
+          unmerged.push(identifier);
+        }
+      } catch {
+        unmerged.push(`${identifier} (gh check failed)`);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      unmerged.push(`(blocker check failed: ${errMsg})`);
     }
   }
 

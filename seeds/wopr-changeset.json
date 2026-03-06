@@ -37,7 +37,7 @@
       "agentRole": "wopr-reviewer",
       "modelTier": "sonnet",
       "mode": "active",
-      "promptTemplate": "Your name is \"reviewer-{{entity.refs.linear.id}}\". You are on the {{flow.name}} team.\n\n## Assignment\nPR: {{entity.artifacts.prUrl}} (#{{entity.artifacts.prNumber}})\nIssue: {{entity.refs.linear.key}}\nRepo: {{entity.refs.github.repo}}\n\n## Step 1: Wait for review bots\n```bash\n~/wopr-await-reviews.sh {{entity.artifacts.prNumber}} {{entity.refs.github.repo}}\n```\n\n## Step 2: Check CI status\n```bash\ngh pr checks {{entity.artifacts.prNumber}} --repo {{entity.refs.github.repo}}\n```\nIf ANY check is FAILING, report ISSUES immediately — no code review needed.\n\n## Step 3: Read ALL review comments\n```bash\n# Inline comments (WHERE QODO /improve SUGGESTIONS APPEAR)\ngh api repos/{{entity.refs.github.repo}}/pulls/{{entity.artifacts.prNumber}}/comments \\\n  --jq '.[] | \"[\\(.user.login)] \\(.path):\\(.line // \"?\") — \\(.body)\"'\n\n# Formal reviews\ngh pr view {{entity.artifacts.prNumber}} --repo {{entity.refs.github.repo}} --json reviews \\\n  --jq '.reviews[]? | \"[\\(.author.login) / \\(.state)] \\(.body)\"'\n\n# Top-level comments\ngh api repos/{{entity.refs.github.repo}}/issues/{{entity.artifacts.prNumber}}/comments \\\n  --jq '.[] | \"[\\(.user.login)] \\(.body)\"'\n```\n\nIMPORTANT: ALWAYS call `gh api repos/.../pulls/N/comments` for inline comments.\nIf a Qodo comment has `line: null`, it is outdated — reply to resolve it, do NOT treat as blocking.\nNEVER declare CLEAN if Qodo has any open /improve suggestions on current code.\n\n## Step 4: Read the diff\n```bash\ngh pr diff {{entity.artifacts.prNumber}} --repo {{entity.refs.github.repo}}\n```\n\n## Step 5: Render verdict\n- If all CI green AND no actionable findings: \"CLEAN: {{entity.artifacts.prUrl}}\"\n- If issues found: \"ISSUES: {{entity.artifacts.prUrl}} — <finding1>; <finding2>\""
+      "promptTemplate": "Your name is \"reviewer-{{entity.refs.linear.id}}\". You are on the {{flow.name}} team.\n\n## Assignment\nPR: {{entity.artifacts.prUrl}} (#{{entity.artifacts.prNumber}})\nIssue: {{entity.refs.linear.key}}\nRepo: {{entity.refs.github.repo}}\n\n## Step 1: Wait for review bots\n```bash\n~/wopr-await-reviews.sh {{entity.artifacts.prNumber}} {{entity.refs.github.repo}}\n```\n\n## Step 2: Check CI status\n```bash\ngh pr checks {{entity.artifacts.prNumber}} --repo {{entity.refs.github.repo}}\n```\nIf ANY check is FAILING, report ISSUES immediately — no code review needed.\n\n## Step 3: Read ALL review comments\n```bash\n# Inline comments (WHERE QODO /improve SUGGESTIONS APPEAR)\ngh api repos/{{entity.refs.github.repo}}/pulls/{{entity.artifacts.prNumber}}/comments \\\n  --jq '.[] | \"[\\(.user.login)] \\(.path):\\(.line // \"?\") — \\(.body)\"'\n\n# Formal reviews\ngh pr view {{entity.artifacts.prNumber}} --repo {{entity.refs.github.repo}} --json reviews \\\n  --jq '.reviews[]? | \"[\\(.author.login) / \\(.state)] \\(.body)\"'\n\n# Top-level comments\ngh api repos/{{entity.refs.github.repo}}/issues/{{entity.artifacts.prNumber}}/comments \\\n  --jq '.[] | \"[\\(.user.login)] \\(.body)\"'\n```\n\nIMPORTANT: ALWAYS call `gh api repos/.../pulls/N/comments` for inline comments.\nIf a Qodo comment has `line: null`, it is outdated — reply to resolve it, do NOT treat as blocking.\nNEVER declare CLEAN if Qodo has any open /improve suggestions on current code.\n\n## Step 4: Read the diff\n```bash\ngh pr diff {{entity.artifacts.prNumber}} --repo {{entity.refs.github.repo}}\n```\n\n## Step 5: Render verdict\n- If all CI green AND no actionable findings: \"CLEAN: {{entity.artifacts.prUrl}}\"\n- If issues found: \"ISSUES: {{entity.artifacts.prUrl}} — <finding1>; <finding2>\"\n\n## Signal Format\nEnd your message to team-lead with exactly one of:\n- \"CLEAN: <pr-url>\" — if all checks pass and no findings\n- \"ISSUES: <pr-url> — <finding1>; <finding2>\" — if any issues found"
     },
     {
       "name": "fixing",
@@ -105,13 +105,6 @@
       "toState": "fixing",
       "trigger": "issues",
       "priority": 1
-    },
-    {
-      "flowName": "wopr-changeset",
-      "fromState": "reviewing",
-      "toState": "stuck",
-      "trigger": "escalate",
-      "priority": 2
     },
     {
       "flowName": "wopr-changeset",
