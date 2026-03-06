@@ -26,6 +26,32 @@ You don't get to DEFCON 3 without passing DEFCON 4. You don't get to DEFCON 2 wi
 
 That's when you ship. Not before.
 
+## Let Me Show You What I Mean
+
+Here's a real flow. An issue enters the WOPR changeset pipeline. This is what happens:
+
+```
+backlog → architecting → coding → reviewing → merging → done
+                                      ↓            ↓
+                                    fixing      reviewing
+                                      ↓
+                                    stuck
+```
+
+An architect agent writes the spec. It emits `spec_ready`. The engine checks: is that signal valid from this state? Is there a transition for it? It finds `architecting → coding` on trigger `spec_ready`. The entity moves to `coding`. A coder agent gets spawned.
+
+The coder writes the code, pushes a PR, emits `pr_created`. The entity moves to `reviewing`. A reviewer agent gets spawned.
+
+Now here's where it gets interesting.
+
+The reviewer runs CI. Reads the diff. Checks every review bot comment. If everything passes, it emits `clean` — and the entity moves to `merging`. But if anything fails — a test, a lint error, a security finding — the reviewer emits `issues`. The entity moves to `fixing`. A fixer agent gets spawned with the specific findings baked into its prompt.
+
+The fixer addresses the findings, pushes, emits `fixes_pushed`. The entity goes *back to reviewing*. Not forward. Back. The reviewer runs again from scratch. New CI. New diff. New review. If it's clean this time, *then* it moves to merging. If not, back to fixing. The loop continues until the work actually passes — or until the system detects it's stuck and flags it for a human.
+
+The entity cannot reach `merging` without the reviewer saying `clean`. The entity cannot reach `done` without the merge succeeding. There is no shortcut from `coding` to `done`. There is no "looks good enough." The escalation is the path, and the path is enforced.
+
+That's one flow. You can define others — incident response, deployment, onboarding — each with their own states, their own gates, their own escalation path. The engine doesn't care what the work is. It cares that the work earns each level before the next one unlocks.
+
 ## The Engine
 
 For a long time, the WOPR pipeline ran on `/wopr:auto` — a ~500-line skill prompt that hand-coded every state transition as an if-statement. "Spec ready" → spawn coder. "CLEAN" → merge. "ISSUES" → spawn fixer. Every new workflow type needed another hand-coded skill. The orchestration logic was frozen in prompts that agents couldn't modify at runtime.
