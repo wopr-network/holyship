@@ -14,7 +14,7 @@ The gap between "the AI did the work" and "the work is correct" is where softwar
 
 DEFCON 1 is launch — production, shipped, live. To get there, work must pass through every prior level in sequence. Each transition is a gate. Each gate is deterministic. The pipeline cannot skip DEFCON 3 to reach DEFCON 2. It cannot reach DEFCON 1 without passing DEFCON 2. The escalation is enforced by the machine, not requested in a prompt.
 
-The goal is still launch. DEFCON doesn't prevent it — it makes it mean something. When the pipeline reaches DEFCON 1, it's because every gate passed. Every check ran. Every level was earned. The missile launches because the system verified it should.
+The goal is still launch. DEFCON doesn't prevent it — it makes it mean something. When the pipeline reaches DEFCON 1, it's because every gate passed. Every check ran. Every level was earned. The system ships because it proved it should.
 
 ## The Engine
 
