@@ -193,8 +193,23 @@ describe("ActiveRunner", () => {
 
     await runner.run({ once: true });
 
+    expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "done", { files: ["main.ts"] });
     expect(invocationRepo.complete).not.toHaveBeenCalled();
     expect(invocationRepo.fail).toHaveBeenCalledWith("inv-1", "transition not found");
+  });
+
+  it("logs and continues when complete() throws after successful processSignal", async () => {
+    const inv = mockInvocation();
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+    invocationRepo.complete.mockRejectedValue(new Error("db write failed"));
+
+    await runner.run({ once: true });
+
+    expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "done", { files: ["main.ts"] });
+    expect(invocationRepo.complete).toHaveBeenCalledWith("inv-1", "done", { files: ["main.ts"] });
+    // complete() threw but the runner should not rethrow — loop continues
+    expect(invocationRepo.fail).not.toHaveBeenCalled();
   });
 
   it("filters by flowName when provided", async () => {
