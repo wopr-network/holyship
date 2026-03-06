@@ -190,10 +190,11 @@ program
       });
 
       const shutdown = () => {
-        stopReaper();
-        httpServer.close();
-        sqlite.close();
-        process.exit(0);
+        stopReaper().then(() => {
+          httpServer.close();
+          sqlite.close();
+          process.exit(0);
+        });
       };
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
@@ -201,9 +202,10 @@ program
       // stdio (default)
       console.error("Starting MCP server on stdio...");
       const cleanup = () => {
-        stopReaper();
-        sqlite.close();
-        process.exit(0);
+        stopReaper().then(() => {
+          sqlite.close();
+          process.exit(0);
+        });
       };
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
@@ -286,10 +288,8 @@ program
     const cleanup = async () => {
       if (closed) return;
       closed = true;
-      stopReaper();
       ac.abort();
-      // Give in-flight operations a moment to complete
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await stopReaper();
       sqlite.close();
       process.exit(0);
     };
@@ -311,7 +311,7 @@ program
 
     if (!closed) {
       closed = true;
-      stopReaper();
+      await stopReaper();
       sqlite.close();
     }
   });

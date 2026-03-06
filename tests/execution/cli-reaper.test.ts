@@ -47,11 +47,63 @@ describe("reaper lifecycle", () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(reapExpired).toHaveBeenCalledTimes(2);
 
-    stop();
+    await stop();
 
     await vi.advanceTimersByTimeAsync(200);
     expect(reapExpired).toHaveBeenCalledTimes(2); // no more calls after stop
 
     vi.useRealTimers();
+  });
+
+  it("stopReaper drains in-flight tick before resolving", async () => {
+    let resolveTick!: () => void;
+    const tickInflight = new Promise<void>((res) => {
+      resolveTick = res;
+    });
+
+    // reapExpired blocks until we release it
+    let reapStarted = false;
+    const reapExpired = vi.fn().mockImplementation(() => {
+      reapStarted = true;
+      return tickInflight.then(() => []);
+    });
+    const reapExpiredEntity = vi.fn().mockResolvedValue(undefined);
+
+    vi.useFakeTimers();
+    const engine = new Engine({
+      entityRepo: { reapExpired: reapExpiredEntity } as any,
+      flowRepo: {} as any,
+      invocationRepo: { reapExpired } as any,
+      gateRepo: {} as any,
+      transitionLogRepo: {} as any,
+      adapters: new Map(),
+      eventEmitter: { emit: vi.fn() } as any,
+    });
+
+    const stop = engine.startReaper(100, 5000);
+
+    // Trigger one tick
+    await vi.advanceTimersByTimeAsync(100);
+    expect(reapStarted).toBe(true);
+
+    vi.useRealTimers();
+
+    // stopReaper should not resolve until the in-flight tick completes
+    let stopResolved = false;
+    const stopPromise = stop().then(() => {
+      stopResolved = true;
+    });
+
+    // Tick is still blocked — stop should not have resolved yet
+    await new Promise((r) => setTimeout(r, 10));
+    expect(stopResolved).toBe(false);
+
+    // Release the in-flight tick
+    resolveTick();
+    await stopPromise;
+    expect(stopResolved).toBe(true);
+
+    // reapExpiredEntity (called after reapExpired resolves) must have run
+    expect(reapExpiredEntity).toHaveBeenCalledWith(5000);
   });
 });
