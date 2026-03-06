@@ -1,10 +1,13 @@
 import { and, eq, isNull, lt, not } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { Artifacts, Entity, IEntityRepository, Refs } from "../interfaces.js";
+import type * as schema from "./schema.js";
 import { entities, entityHistory } from "./schema.js";
 
+type Db = BetterSQLite3Database<typeof schema>;
+
 export class DrizzleEntityRepository implements IEntityRepository {
-  constructor(private db: BetterSQLite3Database) {}
+  constructor(private db: Db) {}
 
   private toEntity(row: typeof entities.$inferSelect): Entity {
     return {
