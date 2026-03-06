@@ -179,26 +179,39 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
   if (!role) return errorResult("Missing required parameter: role");
 
   const flowName = args.flow as string | undefined;
-  if (!flowName) {
-    return errorResult("Parameter 'flow' is required when no default flow is configured");
+
+  let candidates: import("../repositories/interfaces.js").Invocation[] = [];
+
+  if (flowName) {
+    const flow = await deps.flows.getByName(flowName);
+    if (!flow) return errorResult(`Flow not found: ${flowName}`);
+    candidates = await deps.invocations.findUnclaimed(flow.id, role);
+  } else {
+    // No flow specified — search all flows for a claimable entity with this role
+    const allFlows = await deps.flows.list();
+    for (const flow of allFlows) {
+      const unclaimed = await deps.invocations.findUnclaimed(flow.id, role);
+      candidates.push(...unclaimed);
+      if (candidates.length > 0) break;
+    }
   }
 
-  const flow = await deps.flows.getByName(flowName);
-  if (!flow) return errorResult(`Flow not found: ${flowName}`);
+  if (candidates.length === 0) return jsonResult(null);
 
-  const unclaimed = await deps.invocations.findUnclaimed(flow.id, role);
-  if (unclaimed.length === 0) return jsonResult(null);
+  // Iterate candidates to handle race conditions: try each until one succeeds
+  for (const invocation of candidates) {
+    const claimed = await deps.invocations.claim(invocation.id, role);
+    if (claimed) {
+      return jsonResult({
+        entity_id: claimed.entityId,
+        invocation_id: claimed.id,
+        prompt: claimed.prompt,
+        context: claimed.context,
+      });
+    }
+  }
 
-  const invocation = unclaimed[0];
-  const claimed = await deps.invocations.claim(invocation.id, role);
-  if (!claimed) return jsonResult(null);
-
-  return jsonResult({
-    entity_id: claimed.entityId,
-    invocation_id: claimed.id,
-    prompt: claimed.prompt,
-    context: claimed.context,
-  });
+  return jsonResult(null);
 }
 
 async function handleFlowGetPrompt(deps: McpServerDeps, args: Record<string, unknown>) {
@@ -213,10 +226,14 @@ async function handleFlowGetPrompt(deps: McpServerDeps, args: Record<string, unk
     return errorResult(`No invocations found for entity: ${entityId}`);
   }
 
-  const latest = invocationList[invocationList.length - 1];
+  // Return the active (claimed, not completed) invocation rather than the last by insertion order
+  const active =
+    invocationList.find((inv) => inv.claimedAt !== null && inv.completedAt === null && inv.failedAt === null) ??
+    invocationList[invocationList.length - 1];
+
   return jsonResult({
-    prompt: latest.prompt,
-    context: latest.context,
+    prompt: active.prompt,
+    context: active.context,
   });
 }
 
@@ -239,27 +256,26 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
     return errorResult(`No active invocation found for entity: ${entityId}`);
   }
 
-  await deps.invocations.complete(activeInvocation.id, signal, artifacts);
-
   const flow = await deps.flows.get(entity.flowId);
   if (!flow) return errorResult(`Flow not found for entity: ${entityId}`);
 
   const transition = flow.transitions.find((t) => t.fromState === entity.state && t.trigger === signal);
 
+  // Validate the transition exists BEFORE completing the invocation
   if (!transition) {
-    return jsonResult({
-      new_state: entity.state,
-      gates_passed: [],
-      next_action: "waiting",
-    });
+    return errorResult(`No transition from state '${entity.state}' with signal '${signal}' in flow '${flow.name}'`);
   }
+
+  await deps.invocations.complete(activeInvocation.id, signal, artifacts);
 
   const gatesPassed: string[] = [];
   if (transition.gateId) {
     const gate = await deps.gates.get(transition.gateId);
     if (gate) {
-      await deps.gates.record(entityId, gate.id, true, "auto-pass");
-      gatesPassed.push(gate.name);
+      // Gates must be evaluated, not auto-passed. Without an evaluator in deps, block the transition.
+      return errorResult(
+        `Gate '${gate.name}' must be evaluated before transition can proceed. Use a gate evaluator to process this gate.`,
+      );
     }
   }
 
@@ -334,7 +350,7 @@ async function handleQueryEntity(deps: McpServerDeps, args: Record<string, unkno
 async function handleQueryEntities(deps: McpServerDeps, args: Record<string, unknown>) {
   const flowName = args.flow as string | undefined;
   const state = args.state as string | undefined;
-  const limit = (args.limit as number | undefined) ?? 50;
+  const limit = Math.max(1, Math.min(parseInt(String(args.limit ?? 50)) || 50, 250));
 
   if (!flowName) return errorResult("Missing required parameter: flow");
   if (!state) return errorResult("Missing required parameter: state");

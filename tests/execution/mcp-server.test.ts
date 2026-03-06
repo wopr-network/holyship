@@ -144,6 +144,7 @@ function createMockDeps(): McpServerDeps {
     create: async () => mockFlow(),
     get: async (id) => (id === "flow-1" ? mockFlow() : null),
     getByName: async (name) => (name === "test-flow" ? mockFlow() : null),
+    list: async () => [mockFlow()],
     update: async () => mockFlow(),
     addState: async () => mockFlow().states[0],
     updateState: async () => mockFlow().states[0],
@@ -395,6 +396,130 @@ describe("MCP tool handlers", () => {
   it("query.flow returns error for unknown flow", async () => {
     const result = await callTool("query.flow", { name: "nonexistent" });
     expect(result.isError).toBe(true);
+  });
+
+  // Finding 1: flow.report must validate transition before completing invocation
+  it("flow.report returns error (not completing invocation) when signal has no matching transition", async () => {
+    let completeCalled = false;
+    deps.invocations.complete = async (id, signal, artifacts) => {
+      completeCalled = true;
+      return mockInvocation({ id, signal, artifacts: artifacts ?? null, completedAt: new Date() });
+    };
+    const result = await callTool("flow.report", {
+      entity_id: "ent-1",
+      signal: "nonexistent-signal",
+    });
+    expect(result.isError).toBe(true);
+    expect(completeCalled).toBe(false);
+  });
+
+  // Finding 2: flow.claim with no flow searches all flows
+  it("flow.claim without flow param searches all flows", async () => {
+    const result = await callTool("flow.claim", { role: "coder" });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const data = JSON.parse(content[0].text);
+    // Should find work via list() rather than returning an error
+    expect(result.isError).toBeUndefined();
+    expect(data).toHaveProperty("entity_id");
+  });
+
+  // Finding 3: flow.get_prompt returns active (uncompleted) invocation, not last by insertion order
+  it("flow.get_prompt returns active invocation not stale completed one", async () => {
+    const completedInv = mockInvocation({
+      id: "inv-old",
+      prompt: "Old completed prompt",
+      claimedAt: new Date(Date.now() - 10000),
+      completedAt: new Date(Date.now() - 5000),
+    });
+    const activeInv = mockInvocation({
+      id: "inv-active",
+      prompt: "Active prompt",
+      claimedAt: new Date(),
+      completedAt: null,
+    });
+    // Return completed first, then active — array order should not determine result
+    deps.invocations.findByEntity = async () => [completedInv, activeInv];
+    const result = await callTool("flow.get_prompt", { entity_id: "ent-1" });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const data = JSON.parse(content[0].text);
+    expect(data.prompt).toBe("Active prompt");
+  });
+
+  // Finding 4: flow.claim iterates candidates on race condition (claim() returns null for first)
+  it("flow.claim tries next candidate when first claim fails (race condition)", async () => {
+    const inv1 = mockInvocation({ id: "inv-1" });
+    const inv2 = mockInvocation({ id: "inv-2" });
+    deps.invocations.findUnclaimed = async () => [inv1, inv2];
+    let callCount = 0;
+    deps.invocations.claim = async (id, role) => {
+      callCount++;
+      if (id === "inv-1") return null; // lost the race on first candidate
+      return mockInvocation({ id, claimedBy: role, claimedAt: new Date() });
+    };
+    const result = await callTool("flow.claim", { role: "coder", flow: "test-flow" });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const data = JSON.parse(content[0].text);
+    expect(data).not.toBeNull();
+    expect(data.invocation_id).toBe("inv-2");
+    expect(callCount).toBe(2);
+  });
+
+  // Finding 5: gates must not be auto-passed
+  it("flow.report returns error when transition has a gate (no auto-pass)", async () => {
+    const flowWithGate = mockFlow({
+      transitions: [
+        {
+          id: "t-gate",
+          flowId: "flow-1",
+          fromState: "draft",
+          toState: "review",
+          trigger: "complete",
+          gateId: "g-1",
+          condition: null,
+          priority: 0,
+          spawnFlow: null,
+          spawnTemplate: null,
+          createdAt: null,
+        },
+      ],
+    });
+    deps.flows.get = async () => flowWithGate;
+    deps.gates.get = async () => ({
+      id: "g-1",
+      name: "lint-gate",
+      type: "command",
+      command: "pnpm lint",
+      functionRef: null,
+      apiConfig: null,
+      timeoutMs: 30000,
+    });
+    let gateRecorded = false;
+    deps.gates.record = async (entityId, gateId, passed, output) => {
+      gateRecorded = true;
+      return { id: "gr-1", entityId, gateId, passed, output, evaluatedAt: new Date() };
+    };
+    const result = await callTool("flow.report", {
+      entity_id: "ent-1",
+      signal: "complete",
+    });
+    expect(result.isError).toBe(true);
+    expect(gateRecorded).toBe(false);
+  });
+
+  // Finding 6: limit param is clamped
+  it("query.entities clamps limit to valid range", async () => {
+    let capturedLimit = 0;
+    const allEntities = Array.from({ length: 300 }, (_, i) => mockEntity({ id: `ent-${i}` }));
+    deps.entities.findByFlowAndState = async () => allEntities;
+    // Requesting limit=999 should be clamped to 250
+    const result = await callTool("query.entities", {
+      flow: "test-flow",
+      state: "draft",
+      limit: 999,
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    const data = JSON.parse(content[0].text);
+    expect(data.length).toBe(250);
   });
 });
 
