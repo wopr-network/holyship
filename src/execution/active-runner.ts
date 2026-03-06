@@ -107,14 +107,15 @@ export class ActiveRunner {
       return;
     }
 
-    await this.invocationRepo.complete(invocation.id, parsed.signal, parsed.artifacts);
     try {
       await this.engine.processSignal(invocation.entityId, parsed.signal, parsed.artifacts);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[active-runner] processSignal failed for entity ${invocation.entityId}:`, err);
       await this.invocationRepo.fail(invocation.id, message);
+      return;
     }
+    await this.invocationRepo.complete(invocation.id, parsed.signal, parsed.artifacts);
   }
 
   private async resolveModel(invocation: Invocation): Promise<string> {
