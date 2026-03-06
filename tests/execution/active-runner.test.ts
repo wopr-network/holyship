@@ -80,8 +80,8 @@ describe("ActiveRunner", () => {
 
     expect(invocationRepo.claim).toHaveBeenCalledWith("inv-1", "active-runner");
     expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-sonnet-4-6" });
-    expect(invocationRepo.complete).toHaveBeenCalledWith("inv-1", "done", { files: ["main.ts"] });
     expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "done", { files: ["main.ts"] });
+    expect(invocationRepo.complete).toHaveBeenCalledWith("inv-1", "done", { files: ["main.ts"] });
   });
 
   it("maps reasoning tier to claude-opus-4-6", async () => {
@@ -183,6 +183,33 @@ describe("ActiveRunner", () => {
     await runner.run({ signal: controller.signal });
 
     expect(invocationRepo.findUnclaimedActive).toHaveBeenCalledOnce();
+  });
+
+  it("fails invocation when processSignal throws (not swallowed)", async () => {
+    const inv = mockInvocation();
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+    engine.processSignal.mockRejectedValue(new Error("transition not found"));
+
+    await runner.run({ once: true });
+
+    expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "done", { files: ["main.ts"] });
+    expect(invocationRepo.complete).not.toHaveBeenCalled();
+    expect(invocationRepo.fail).toHaveBeenCalledWith("inv-1", "transition not found");
+  });
+
+  it("logs and continues when complete() throws after successful processSignal", async () => {
+    const inv = mockInvocation();
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+    invocationRepo.complete.mockRejectedValue(new Error("db write failed"));
+
+    await runner.run({ once: true });
+
+    expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "done", { files: ["main.ts"] });
+    expect(invocationRepo.complete).toHaveBeenCalledWith("inv-1", "done", { files: ["main.ts"] });
+    // complete() threw but the runner should not rethrow — loop continues
+    expect(invocationRepo.fail).not.toHaveBeenCalled();
   });
 
   it("filters by flowName when provided", async () => {

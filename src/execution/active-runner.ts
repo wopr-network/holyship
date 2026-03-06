@@ -107,13 +107,27 @@ export class ActiveRunner {
       return;
     }
 
-    await this.invocationRepo.complete(invocation.id, parsed.signal, parsed.artifacts);
     try {
       await this.engine.processSignal(invocation.entityId, parsed.signal, parsed.artifacts);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[active-runner] processSignal failed for entity ${invocation.entityId}:`, err);
       await this.invocationRepo.fail(invocation.id, message);
+      return;
+    }
+
+    // NOTE: The invocation claim TTL (default 30 min) starts at claim time and covers both the
+    // AI call and processSignal. If either takes longer than the TTL, the reaper may release the
+    // claim and allow duplicate processing. No heartbeat/extendClaim mechanism exists yet.
+    // Ensure claimTtl >= 2x the expected AI window when configuring invocations.
+    try {
+      await this.invocationRepo.complete(invocation.id, parsed.signal, parsed.artifacts);
+    } catch (err) {
+      // processSignal already succeeded and entity state has changed — log and continue.
+      console.error(
+        `[active-runner] complete() failed for invocation ${invocation.id} (signal already processed):`,
+        err,
+      );
     }
   }
 
