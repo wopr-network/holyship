@@ -1,6 +1,7 @@
 import type { IEventBusAdapter } from "../adapters/interfaces.js";
 import type {
   Artifacts,
+  EnrichedEntity,
   Entity,
   Flow,
   IEntityRepository,
