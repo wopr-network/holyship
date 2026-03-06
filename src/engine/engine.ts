@@ -104,7 +104,6 @@ export class Engine {
             },
           ],
         });
-
         await this.eventEmitter.emit({
           type: "gate.failed",
           entityId,

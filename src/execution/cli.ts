@@ -52,7 +52,7 @@ function openDb(dbPath: string) {
 }
 
 const program = new Command();
-program.name("agentic").version("0.1.0");
+program.name("defcon").version("0.1.0");
 
 // ─── init ───
 program
@@ -123,25 +123,35 @@ program
   .option("--claim-ttl <ms>", "Claim TTL in milliseconds", CLAIM_TTL_DEFAULT)
   .action(async (opts) => {
     const { db, sqlite } = openDb(opts.db);
-    const deps: McpServerDeps = {
-      entities: new DrizzleEntityRepository(db),
-      flows: new DrizzleFlowRepository(db),
-      invocations: new DrizzleInvocationRepository(db),
-      gates: new DrizzleGateRepository(db),
-      transitions: new DrizzleTransitionLogRepository(db),
-      eventRepo: new DrizzleEventRepository(db),
-      integrationRepo: new DrizzleIntegrationRepository(db),
-    };
+    const entityRepo = new DrizzleEntityRepository(db);
+    const flowRepo = new DrizzleFlowRepository(db);
+    const invocationRepo = new DrizzleInvocationRepository(db);
+    const gateRepo = new DrizzleGateRepository(db);
+    const transitionLogRepo = new DrizzleTransitionLogRepository(db);
+
+    const eventEmitter = new CompositeEventBusAdapter([new StdoutAdapter()]);
 
     const engine = new Engine({
-      entityRepo: deps.entities,
-      flowRepo: deps.flows,
-      invocationRepo: deps.invocations,
-      gateRepo: deps.gates,
-      transitionLogRepo: deps.transitions,
+      entityRepo,
+      flowRepo,
+      invocationRepo,
+      gateRepo,
+      transitionLogRepo,
       adapters: new Map(),
-      eventEmitter: new CompositeEventBusAdapter([]),
+      eventEmitter,
     });
+
+    const deps: McpServerDeps = {
+      entities: entityRepo,
+      flows: flowRepo,
+      invocations: invocationRepo,
+      gates: gateRepo,
+      transitions: transitionLogRepo,
+      eventRepo: new DrizzleEventRepository(db),
+      integrationRepo: new DrizzleIntegrationRepository(db),
+      engine,
+    };
+
     const reaperInterval = parseInt(opts.reaperInterval, 10);
     if (Number.isNaN(reaperInterval) || reaperInterval < 1000) {
       console.error("--reaper-interval must be a number >= 1000ms");
