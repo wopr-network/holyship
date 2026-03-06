@@ -132,6 +132,13 @@ describe("DrizzleFlowRepository", () => {
       expect(updated.promptTemplate).toBe("Do {{thing}}");
     });
 
+    it("no-ops gracefully when changes is empty", async () => {
+      const flow = await repo.create({ name: "us-noop", initialState: "s" });
+      const state = await repo.addState(flow.id, { name: "s", mode: "active" });
+      const result = await repo.updateState(state.id, {});
+      expect(result.mode).toBe("active");
+    });
+
     it("throws for non-existent state", async () => {
       await expect(repo.updateState("bad", { name: "x" })).rejects.toThrow("State not found");
     });
@@ -172,6 +179,13 @@ describe("DrizzleFlowRepository", () => {
       expect(updated.priority).toBe(99);
     });
 
+    it("no-ops gracefully when changes is empty", async () => {
+      const flow = await repo.create({ name: "ut-noop", initialState: "s" });
+      const t = await repo.addTransition(flow.id, { fromState: "s", toState: "d", trigger: "go", priority: 5 });
+      const result = await repo.updateTransition(t.id, {});
+      expect(result.priority).toBe(5);
+    });
+
     it("throws for non-existent transition", async () => {
       await expect(repo.updateTransition("bad", { priority: 1 })).rejects.toThrow("Transition not found");
     });
@@ -188,9 +202,12 @@ describe("DrizzleFlowRepository", () => {
       expect(ver.version).toBe(1);
       expect(ver.flowId).toBe(flow.id);
       expect(ver.createdAt).toBeInstanceOf(Date);
-      const snap = ver.snapshot as { states: unknown[]; transitions: unknown[] };
+      const snap = ver.snapshot as { name: string; initialState: string; states: unknown[]; transitions: unknown[] };
       expect(snap.states).toHaveLength(2);
       expect(snap.transitions).toHaveLength(1);
+      // Snapshot must include top-level flow metadata, not just states/transitions
+      expect(snap.name).toBe("snap");
+      expect(snap.initialState).toBe("open");
     });
 
     it("auto-increments version", async () => {
