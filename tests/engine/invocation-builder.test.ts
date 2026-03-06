@@ -63,4 +63,19 @@ describe("buildInvocation", () => {
     const result = buildInvocation(state, entity);
     expect(result.mode).toBe("passive");
   });
+
+  it("renders built-in helpers from shared Handlebars instance", () => {
+    const state = makeState({
+      promptTemplate: "Count: {{invocation_count entity \"coding\"}}",
+    });
+    const entity = makeEntity({
+      invocations: [
+        { stage: "coding" },
+        { stage: "coding" },
+        { stage: "review" },
+      ],
+    } as Partial<Entity>);
+    const result = buildInvocation(state, entity);
+    expect(result.prompt).toBe("Count: 2");
+  });
 });

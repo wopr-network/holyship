@@ -1,5 +1,5 @@
-import Handlebars from "handlebars";
 import type { Entity, Mode, State } from "../repositories/interfaces.js";
+import { getHandlebars } from "./handlebars.js";
 
 export interface InvocationBuild {
   prompt: string;
@@ -15,7 +15,7 @@ export interface InvocationBuild {
 export function buildInvocation(state: State, entity: Entity): InvocationBuild {
   let prompt = "";
   if (state.promptTemplate) {
-    const template = Handlebars.compile(state.promptTemplate);
+    const template = getHandlebars().compile(state.promptTemplate);
     prompt = template({ entity, state });
   }
 
