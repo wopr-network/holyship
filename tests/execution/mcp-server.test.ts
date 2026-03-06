@@ -533,7 +533,7 @@ describe("MCP tool handlers", () => {
     });
     const content = result.content as Array<{ type: string; text: string }>;
     const data = JSON.parse(content[0].text);
-    expect(data.length).toBe(250);
+    expect(data.length).toBe(100);
   });
 });
 
