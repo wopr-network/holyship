@@ -16,6 +16,7 @@ import { findTransition, isTerminal } from "./state-machine.js";
 
 export interface ProcessSignalResult {
   newState?: string;
+  /** Names (not IDs) of gates that evaluated and passed during this transition. */
   gatesPassed: string[];
   gated: boolean;
   gateOutput?: string;
@@ -67,7 +68,12 @@ export class Engine {
     this.eventEmitter = deps.eventEmitter;
   }
 
-  async processSignal(entityId: string, signal: string, artifacts?: Artifacts): Promise<ProcessSignalResult> {
+  async processSignal(
+    entityId: string,
+    signal: string,
+    artifacts?: Artifacts,
+    triggeringInvocationId?: string,
+  ): Promise<ProcessSignalResult> {
     // 1. Load entity
     const entity = await this.entityRepo.get(entityId);
     if (!entity) throw new Error(`Entity "${entityId}" not found`);
@@ -104,7 +110,6 @@ export class Engine {
             },
           ],
         });
-
         await this.eventEmitter.emit({
           type: "gate.failed",
           entityId,
@@ -113,7 +118,7 @@ export class Engine {
         });
         return { gated: true, gateOutput: gateResult.output, gateName: gate.name, gatesPassed, terminal: false };
       }
-      gatesPassed.push(gate.id);
+      gatesPassed.push(gate.name);
       await this.eventEmitter.emit({
         type: "gate.passed",
         entityId,
@@ -172,13 +177,14 @@ export class Engine {
       }
     }
 
-    // 8. Record transition log — after invocation creation so invocationId is available
+    // 8. Record transition log with the TRIGGERING invocation (the one that reported the signal).
+    //    The next invocation (result.invocationId) is already recorded in the invocations table.
     await this.transitionLogRepo.record({
       entityId,
       fromState: entity.state,
       toState: transition.toState,
       trigger: signal,
-      invocationId: result.invocationId ?? null,
+      invocationId: triggeringInvocationId ?? null,
       timestamp: new Date(),
     });
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMcpServer } from "../../src/execution/mcp-server.js";
 import type { McpServerDeps } from "../../src/execution/mcp-server.js";
+import { Engine } from "../../src/engine/engine.js";
 import type {
   Entity,
   Flow,
@@ -182,6 +183,8 @@ function createMockDeps(): McpServerDeps {
       mockInvocation({ claimedBy: "coder", claimedAt: new Date() }),
     ],
     findUnclaimed: async () => [mockInvocation()],
+    findByFlow: async () => [],
+    findUnclaimedActive: async () => [],
     reapExpired: async () => [],
   };
 
@@ -197,6 +200,7 @@ function createMockDeps(): McpServerDeps {
     }),
     get: async () => null,
     getByName: async () => null,
+    listAll: async () => [],
     record: async (entityId, gateId, passed, output) => ({
       id: "gr-1",
       entityId,
@@ -221,7 +225,19 @@ function createMockDeps(): McpServerDeps {
     set: async (capability, adapter, config) => ({ capability, adapter, config: config ?? null }),
   };
 
-  return { entities, flows, invocations, gates, transitions, eventRepo, integrationRepo };
+  const noopEventEmitter = { emit: async () => {} };
+
+  const engine = new Engine({
+    entityRepo: entities,
+    flowRepo: flows,
+    invocationRepo: invocations,
+    gateRepo: gates,
+    transitionLogRepo: transitions,
+    adapters: new Map(),
+    eventEmitter: noopEventEmitter,
+  });
+
+  return { entities, flows, invocations, gates, transitions, eventRepo, integrationRepo, engine };
 }
 
 // ─── Tests ───
@@ -420,8 +436,10 @@ describe("MCP tool handlers", () => {
     expect(result.isError).toBe(true);
   });
 
-  // Finding 1: flow.report must validate transition before completing invocation
-  it("flow.report returns error (not completing invocation) when signal has no matching transition", async () => {
+  // Finding 1: flow.report completes the invocation before delegating to the engine
+  // (so the concurrency check doesn't count it as active). If the signal has no
+  // matching transition the engine throws and the invocation is already completed.
+  it("flow.report returns error when signal has no matching transition", async () => {
     let completeCalled = false;
     deps.invocations.complete = async (id, signal, artifacts) => {
       completeCalled = true;
@@ -432,7 +450,7 @@ describe("MCP tool handlers", () => {
       signal: "nonexistent-signal",
     });
     expect(result.isError).toBe(true);
-    expect(completeCalled).toBe(false);
+    expect(completeCalled).toBe(true);
   });
 
   // Finding 2: flow.claim with no flow searches all flows
@@ -486,8 +504,8 @@ describe("MCP tool handlers", () => {
     expect(callCount).toBe(2);
   });
 
-  // Finding 5: gates must not be auto-passed
-  it("flow.report returns error when transition has a gate (no auto-pass)", async () => {
+  // Finding 5: gates must not be auto-passed — engine evaluates gate and blocks if it fails
+  it("flow.report returns gated result when gate fails", async () => {
     const flowWithGate = mockFlow({
       transitions: [
         {
@@ -506,20 +524,16 @@ describe("MCP tool handlers", () => {
       ],
     });
     deps.flows.get = async () => flowWithGate;
+    deps.flows.getByName = async () => flowWithGate;
     deps.gates.get = async () => ({
       id: "g-1",
       name: "lint-gate",
       type: "command",
-      command: "pnpm lint",
+      command: "false",
       functionRef: null,
       apiConfig: null,
       timeoutMs: 30000,
     });
-    let gateRecorded = false;
-    deps.gates.record = async (entityId, gateId, passed, output) => {
-      gateRecorded = true;
-      return { id: "gr-1", entityId, gateId, passed, output, evaluatedAt: new Date() };
-    };
     deps.gates.resultsFor = async () => [];
     let failCalled = false;
     deps.invocations.fail = async (id, error) => {
@@ -531,19 +545,28 @@ describe("MCP tool handlers", () => {
       completeCalled = true;
       return mockInvocation({ id, signal, artifacts: artifacts ?? null, completedAt: new Date() });
     };
+    // Rebuild engine with updated deps
+    const noopEventEmitter = { emit: async () => {} };
+    deps.engine = new Engine({
+      entityRepo: deps.entities,
+      flowRepo: deps.flows,
+      invocationRepo: deps.invocations,
+      gateRepo: deps.gates,
+      transitionLogRepo: deps.transitions,
+      adapters: new Map(),
+      eventEmitter: noopEventEmitter,
+    });
     const result = await callTool("flow.report", {
       entity_id: "ent-1",
       signal: "complete",
     });
-    // Gate block now returns structured JSON (not an error), but still fails invocation
-    expect(result.isError).toBeUndefined();
-    const data = JSON.parse(result.content[0].text);
+    const content = result.content as Array<{ type: string; text: string }>;
+    const data = JSON.parse(content[0].text);
+    // Gate blocked — invocation completed (so concurrency count is correct),
+    // and a replacement unclaimed invocation is created so entity can be reclaimed.
     expect(data.gated).toBe(true);
-    expect(data.gateName).toBe("lint-gate");
-    expect(gateRecorded).toBe(false);
-    // Gate blocked BEFORE complete — invocation must be failed (not completed) so entity can be reclaimed
-    expect(failCalled).toBe(true);
-    expect(completeCalled).toBe(false);
+    expect(failCalled).toBe(false);
+    expect(completeCalled).toBe(true);
   });
 
   it("flow.report returns structured gate info (gated, gateName) when gate blocks", async () => {
@@ -569,7 +592,7 @@ describe("MCP tool handlers", () => {
       id: "g-2",
       name: "ci_passes",
       type: "command",
-      command: "gh pr checks",
+      command: "false",
       functionRef: null,
       apiConfig: null,
       timeoutMs: 30000,
