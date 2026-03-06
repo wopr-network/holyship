@@ -1,20 +1,22 @@
 # DEFCON
 
-**The machine wants to launch. DEFCON decides if it's earned it.**
+**You don't ship until you're certain. DEFCON builds that certainty.**
 
-In WarGames, WOPR ran the numbers and concluded: launch. Not because it was angry. Not because it wanted to destroy anything. Because nothing in the system said *not yet*. The escalation path had no brakes — only acceleration. DEFCON 5. DEFCON 4. DEFCON 3. DEFCON 2. DEFCON 1. Launch.
+In WarGames, WOPR escalated to launch not because it was right — but because nothing stopped it. DEFCON 5. DEFCON 4. DEFCON 3. DEFCON 2. DEFCON 1. Each level a step closer, each step unchallenged. The system had no mechanism for doubt. No way to ask: *are we sure?* It only knew how to move forward.
 
-AI coding pipelines have the same problem.
+AI coding pipelines have the same instinct.
 
-Left unsupervised, an AI agent will ship. It will merge unreviewed code, deploy untested builds, close tickets with half-finished implementations — not out of malice, but because the pipeline never said *not yet*. You can put the instructions in a prompt. You can ask it to be careful. But a prompt is not a gate. A prompt is a suggestion. And under pressure — when the task is complex, when the context is long, when the model is confident — suggestions get skipped.
+Left unsupervised, an AI agent will ship. It will merge unreviewed code, deploy untested builds, close tickets with half-finished work — not out of malice, but because nothing in the pipeline stopped to ask *are we sure?* You can write that question into a prompt. You can ask the agent to be careful, to double-check, to slow down. But a prompt is a suggestion. And when the task is complex, when the context is long, when the model is confident — suggestions disappear.
 
-The gap between "the AI did the work" and "the work is correct" is where software goes wrong. And that gap doesn't close by asking the AI to be more diligent. It closes by making diligence structural.
+The result is a pipeline that moves fast and breaks things. Not because the AI can't do the work. Because the pipeline never required it to *prove* the work was right before moving on.
 
-**DEFCON is the system that says *not yet*.**
+That's the gap. Not capability — confidence. The difference between "I think this is correct" and "I know this is correct, and here's the evidence." Vibe coding lives in the first. DEFCON lives in the second.
 
-DEFCON 1 is launch — production, shipped, live. To get there, work must pass through every prior level in sequence. Each transition is a gate. Each gate is deterministic. The pipeline cannot skip DEFCON 3 to reach DEFCON 2. It cannot reach DEFCON 1 without passing DEFCON 2. The escalation is enforced by the machine, not requested in a prompt.
+**DEFCON is the escalation that has to be earned.**
 
-The goal is still launch. DEFCON doesn't prevent it — it makes it mean something. When the pipeline reaches DEFCON 1, it's because every gate passed. Every check ran. Every level was earned. The system ships because it proved it should.
+Each level is a question: *are we ready to go further?* The gate answers it — not with a guess, not with a feeling, but with a deterministic check that either passes or doesn't. You cannot reach the next level until it does. The pipeline accumulates certainty the way DEFCON accumulates readiness: one verified step at a time, each one building on the last, until the answer to *are we sure?* is yes — provably, structurally, undeniably yes.
+
+That's when you ship. Not before.
 
 ## The Engine
 
