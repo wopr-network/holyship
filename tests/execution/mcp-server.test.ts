@@ -553,7 +553,7 @@ describe("MCP tool handlers", () => {
           toState: "done",
           trigger: "complete",
           condition: '{{#if (eq entity.state "wrong")}}true{{/if}}',
-          priority: 0,
+          priority: 2,
           gateId: null,
           spawnFlow: null,
           spawnTemplate: null,
@@ -588,7 +588,7 @@ describe("MCP tool handlers", () => {
     });
 
     expect(result.isError).toBeUndefined();
-    // Priority 1 unconditional transition wins over priority 0 conditional that doesn't match
+    // Priority 1 unconditional transition wins over priority 2 conditional that doesn't match
     expect(transitionedTo).toBe("review");
   });
 

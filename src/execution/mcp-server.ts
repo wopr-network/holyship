@@ -485,26 +485,36 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
   const flow = await deps.flows.get(entity.flowId);
   if (!flow) return errorResult(`Flow not found for entity: ${entityId}`);
 
-  const transition = findTransition(flow, entity.state, signal, { entity }, true);
+  const priorGateResults = await deps.gates.resultsFor(entityId);
+  const entityWithGates = {
+    ...entity,
+    gateResults: priorGateResults.map((r) => ({ gate: r.gateId, passed: r.passed })),
+  };
+
+  const transition = findTransition(flow, entity.state, signal, { entity: entityWithGates });
 
   // Validate the transition exists BEFORE completing the invocation
   if (!transition) {
-    return errorResult(`No transition from state '${entity.state}' with signal '${signal}' in flow '${flow.name}'`);
-  }
-
-  // Check gate BEFORE completing — if gate blocks, fail the invocation so entity can be reclaimed
-  const gatesPassed: string[] = [];
-  if (transition.gateId) {
-    const gate = await deps.gates.get(transition.gateId);
-    if (gate) {
-      // Check if the gate already has a prior passing result — if so, proceed
-      const priorResults = await deps.gates.resultsFor(entityId);
-      const alreadyPassed = priorResults.some((r) => r.gateId === transition.gateId && r.passed === true);
-      if (!alreadyPassed) {
+    // Check if a gated transition exists but is blocked — if so, fail the invocation so entity can be reclaimed
+    const blockedGatedCandidate = flow.transitions.find(
+      (t) => t.fromState === entity.state && t.trigger === signal && t.gateId !== null,
+    );
+    if (blockedGatedCandidate?.gateId) {
+      const gate = await deps.gates.get(blockedGatedCandidate.gateId);
+      if (gate) {
         const gateError = `Gate '${gate.name}' must be evaluated before transition can proceed. Use a gate evaluator to process this gate.`;
         await deps.invocations.fail(activeInvocation.id, gateError);
         return errorResult(gateError);
       }
+    }
+    return errorResult(`No transition from state '${entity.state}' with signal '${signal}' in flow '${flow.name}'`);
+  }
+
+  // Gate passed (findTransition verified via entity.gateResults) — record for tracking
+  const gatesPassed: string[] = [];
+  if (transition.gateId) {
+    const gate = await deps.gates.get(transition.gateId);
+    if (gate) {
       gatesPassed.push(gate.name);
     }
   }
