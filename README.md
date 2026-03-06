@@ -28,77 +28,57 @@ That's when you ship. Not before.
 
 ## Let Me Show You What I Mean
 
-Here's a real flow. An issue enters the WOPR changeset pipeline. This is what happens:
+Here's a flow. A feature request enters your pipeline:
 
 ```
-backlog → architecting → coding → reviewing → merging → done
-                                      ↓            ↓
-                                    fixing      reviewing
-                                      ↓
-                                    stuck
+backlog → spec → coding → reviewing → merging → done
+                              ↓            ↓
+                            fixing      reviewing
+                              ↓
+                            stuck
 ```
 
-An architect agent writes the spec. It emits `spec_ready`. The engine checks: is that signal valid from this state? Is there a transition for it? It finds `architecting → coding` on trigger `spec_ready`. The entity moves to `coding`. A coder agent gets spawned.
+An architect agent writes the spec. It emits `spec_ready`. The engine checks: is that signal valid from this state? Is there a transition for it? It finds `spec → coding` on trigger `spec_ready`. The entity advances. A coder agent gets spawned.
 
 The coder writes the code, pushes a PR, emits `pr_created`. The entity moves to `reviewing`. A reviewer agent gets spawned.
 
 Now here's where it gets interesting.
 
-The reviewer runs CI. Reads the diff. Checks every review bot comment. If everything passes, it emits `clean` — and the entity moves to `merging`. But if anything fails — a test, a lint error, a security finding — the reviewer emits `issues`. The entity moves to `fixing`. A fixer agent gets spawned with the specific findings baked into its prompt.
+The reviewer runs CI. Reads the diff. Checks every review comment. If everything passes, it emits `clean` — and the entity moves to `merging`. But if anything fails — a test, a lint error, a security finding — the reviewer emits `issues`. The entity moves to `fixing`. A fixer agent gets spawned with the specific findings baked into its prompt.
 
 The fixer addresses the findings, pushes, emits `fixes_pushed`. The entity goes *back to reviewing*. Not forward. Back. The reviewer runs again from scratch. New CI. New diff. New review. If it's clean this time, *then* it moves to merging. If not, back to fixing. The loop continues until the work actually passes — or until the system detects it's stuck and flags it for a human.
 
-The entity cannot reach `merging` without the reviewer saying `clean`. The entity cannot reach `done` without the merge succeeding. There is no shortcut from `coding` to `done`. There is no "looks good enough." The escalation is the path, and the path is enforced.
+The entity cannot reach `merging` without the reviewer saying `clean`. It cannot reach `done` without the merge succeeding. There is no shortcut from `coding` to `done`. There is no "looks good enough." The escalation is the path, and the path is enforced.
 
-That's one flow. You can define others — incident response, deployment, onboarding — each with their own states, their own gates, their own escalation path. The engine doesn't care what the work is. It cares that the work earns each level before the next one unlocks.
+That's one flow. You define others — incident response, deployments, onboarding — each with their own states, their own gates, their own escalation path. DEFCON doesn't care what the work is. It cares that the work earns each level before the next one unlocks.
 
 ## The Engine
 
-For a long time, the WOPR pipeline ran on `/wopr:auto` — a ~500-line skill prompt that hand-coded every state transition as an if-statement. "Spec ready" → spawn coder. "CLEAN" → merge. "ISSUES" → spawn fixer. Every new workflow type needed another hand-coded skill. The orchestration logic was frozen in prompts that agents couldn't modify at runtime.
-
-DEFCON replaces that with a configurable state machine runtime. Define your escalation path once. The engine enforces it forever.
-
-A **flow** is a state machine for any type of work. Entities (issues, deployments, incidents) enter a flow and move through states. At each state an agent does work. At each boundary a deterministic gate verifies the output. Transitions fire on signals — not parsed natural language, not regex, but typed strings agents emit via MCP tool call. The entire definition lives in a database. Agents can mutate it at runtime via the admin API. The pipeline's self-improvement loop becomes a literal API call.
+A **flow** is a state machine. Entities enter it and move through states. At each state an agent does work. At each boundary a deterministic gate verifies the output. Transitions fire on signals — not parsed natural language, not regex, but typed strings agents emit via tool call. The entire definition lives in a database and can be mutated at runtime.
 
 ```
-/wopr:auto (before)          DEFCON (after)
-────────────────────         ──────────────────────────────────
-500-line skill prompt    →   JSON seed file
-if-statement routing     →   signal → transition → gate → state
-hand-coded CI check      →   shell gate: npm test
-manual agent spawning    →   invocation lifecycle per state
-message parsing          →   flow.report({ signal: "pr.created" })
-stuck detection counter  →   conditional transition rule
-slot counting            →   flow-level concurrency config
-new workflow = new skill →   new flow definition in DB
+What you'd hand-code          What DEFCON does
+──────────────────────        ──────────────────────────────────
+if-statement routing      →   signal → transition → gate → state
+hard-coded CI check       →   shell gate: npm test
+manual agent spawning     →   invocation lifecycle per state
+message parsing           →   flow.report({ signal: "pr.created" })
+stuck detection counter   →   conditional transition rule
+slot counting             →   flow-level concurrency config
+new workflow = new code   →   new flow definition in DB
 ```
 
-The engine has two execution modes. **Passive**: Claude Code agents connect via MCP and pull work — `flow.claim()`, do the work, `flow.report()`. The engine manages state. **Active**: the engine calls AI provider APIs directly and runs the full pipeline autonomously. Stages can mix modes within the same flow.
-
-The changeset flow seed in `seeds/wopr-changeset.json` is the direct replacement for `/wopr:auto`.
-
-### `src/` — The Engine
-
-```
-src/
-  engine/         state machine, gate evaluator, invocation builder, event emitter, flow spawner
-  repositories/   interfaces + Drizzle/SQLite implementations
-  execution/      MCP server (passive mode), active runner, CLI
-  adapters/       Linear, GitHub, Anthropic, Discord, Webhook, Stdout
-  config/         seed loader + Zod schemas
-```
-
-**Core dependencies:** `better-sqlite3`, `drizzle-orm`, `handlebars`, `@modelcontextprotocol/sdk`, `zod`
+Two execution modes. **Passive**: agents connect via MCP and pull work — `flow.claim()`, do the work, `flow.report()`. The engine manages state. **Active**: the engine calls AI provider APIs directly and runs the full pipeline autonomously. Stages can mix modes within the same flow.
 
 ```bash
-# Bootstrap from seed
-npx defcon init --seed seeds/wopr-changeset.json
+# Bootstrap from a flow definition
+npx defcon init --seed seeds/my-pipeline.json
 
 # Serve MCP (passive mode — agents pull work)
 npx defcon serve
 
 # Run autonomous pipeline (active mode)
-npx defcon run --flow changeset
+npx defcon run --flow my-pipeline
 
 # Check pipeline state
 npx defcon status
@@ -106,24 +86,18 @@ npx defcon status
 
 ---
 
-## What It Looks Like
-
 ```
 Vibe Coding:  Human → AI → Hope → Production
 DEFCON:       Human → AI → Gate → AI → Gate → AI → Gate → Production
 ```
 
-Every transition is earned. Every gate is deterministic. Every failure feeds back into the system so the same mistake can't happen twice. The pipeline gets smarter over time — sprint 100 is easier than sprint 1 because the gates evolve.
+Every transition is earned. Every gate is deterministic. Every failure feeds back so the same mistake can't happen twice. The pipeline gets smarter over time — sprint 100 is easier than sprint 1 because the gates evolve.
 
-## What's In This Repo
+## Documentation
 
-This repo ships three things: the principles, the proof, and the engine.
+**[`docs/method/`](docs/method/)** — The principles. Tool-agnostic patterns for building gated AI pipelines. Why deterministic gates work. How agents, triggers, and gates compose. Adopt it with whatever tools you use.
 
-**[`docs/method/`](docs/method/)** — The principles. Tool-agnostic patterns for building gated AI pipelines. Why deterministic gates work. What the pipeline stages are. How agents, triggers, and gates compose. Read this to understand the methodology. Adopt it with whatever tools you use.
-
-**[`docs/wopr/`](docs/wopr/)** — The proof. WOPR's concrete implementation of every principle — 14+ agent definitions, Discord as event bus, Linear as issue tracker, Biome + TypeScript + 4 review bots as gates, CLAUDE.md inheritance across 20+ repos. Every method/ doc has a [1:1 counterpart in wopr/](docs/wopr/) showing the real config.
-
-**[`docs/adoption/`](docs/adoption/)** — The bridge. [Getting started](docs/adoption/getting-started.md), [checklist](docs/adoption/checklist.md), [migration guide](docs/adoption/migration-guide.md). How to go from reading about it to running it.
+**[`docs/adoption/`](docs/adoption/)** — The bridge. [Getting started](docs/adoption/getting-started.md), [checklist](docs/adoption/checklist.md), [migration guide](docs/adoption/migration-guide.md).
 
 ## Who This Is For
 
