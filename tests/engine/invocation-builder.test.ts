@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildInvocation } from "../../src/engine/invocation-builder.js";
-import type { Entity, State } from "../../src/repositories/interfaces.js";
+import type { EnrichedEntity, Entity, State } from "../../src/repositories/interfaces.js";
 
 function makeState(overrides: Partial<State> = {}): State {
   return {
@@ -68,13 +68,14 @@ describe("buildInvocation", () => {
     const state = makeState({
       promptTemplate: "Count: {{invocation_count entity \"coding\"}}",
     });
-    const entity = makeEntity({
+    const entity: EnrichedEntity = {
+      ...makeEntity(),
       invocations: [
-        { stage: "coding" },
-        { stage: "coding" },
-        { stage: "review" },
+        { id: "i-1", entityId: "ent-1", stage: "coding", agentRole: null, mode: "active", prompt: "", context: null, claimedBy: null, claimedAt: null, startedAt: null, completedAt: null, failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 0 },
+        { id: "i-2", entityId: "ent-1", stage: "coding", agentRole: null, mode: "active", prompt: "", context: null, claimedBy: null, claimedAt: null, startedAt: null, completedAt: null, failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 0 },
+        { id: "i-3", entityId: "ent-1", stage: "review", agentRole: null, mode: "active", prompt: "", context: null, claimedBy: null, claimedAt: null, startedAt: null, completedAt: null, failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 0 },
       ],
-    } as Partial<Entity>);
+    };
     const result = buildInvocation(state, entity);
     expect(result.prompt).toBe("Count: 2");
   });

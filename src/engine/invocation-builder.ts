@@ -1,4 +1,4 @@
-import type { Entity, Mode, State } from "../repositories/interfaces.js";
+import type { EnrichedEntity, Mode, State } from "../repositories/interfaces.js";
 import { getHandlebars } from "./handlebars.js";
 
 export interface InvocationBuild {
@@ -12,7 +12,7 @@ export interface InvocationBuild {
  * Build an invocation's prompt and context from a state definition and entity.
  * Uses Handlebars to render the prompt template with entity data.
  */
-export function buildInvocation(state: State, entity: Entity): InvocationBuild {
+export function buildInvocation(state: State, entity: EnrichedEntity): InvocationBuild {
   let prompt = "";
   if (state.promptTemplate) {
     const template = getHandlebars().compile(state.promptTemplate);
