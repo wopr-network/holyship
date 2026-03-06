@@ -2,6 +2,8 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { events, integrationConfig } from "../repositories/drizzle/schema.js";
 import type {
   IEntityRepository,
   IFlowRepository,
@@ -9,6 +11,19 @@ import type {
   IInvocationRepository,
   ITransitionLogRepository,
 } from "../repositories/interfaces.js";
+import {
+  AdminFlowCreateSchema,
+  AdminFlowRestoreSchema,
+  AdminFlowSnapshotSchema,
+  AdminFlowUpdateSchema,
+  AdminGateAttachSchema,
+  AdminGateCreateSchema,
+  AdminIntegrationSetSchema,
+  AdminStateCreateSchema,
+  AdminStateUpdateSchema,
+  AdminTransitionCreateSchema,
+  AdminTransitionUpdateSchema,
+} from "./admin-schemas.js";
 
 export interface McpServerDeps {
   entities: IEntityRepository;
@@ -16,6 +31,7 @@ export interface McpServerDeps {
   invocations: IInvocationRepository;
   gates: IGateRepository;
   transitions: ITransitionLogRepository;
+  db: BetterSQLite3Database;
 }
 
 const TOOL_DEFINITIONS = [
@@ -117,6 +133,177 @@ const TOOL_DEFINITIONS = [
       required: ["name"],
     },
   },
+  // ─── Admin Tools ───
+  {
+    name: "admin.flow.create",
+    description: "Create a new flow definition.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Unique flow name" },
+        initialState: { type: "string", description: "Name of the initial state" },
+        description: { type: "string", description: "Flow description" },
+        entitySchema: { type: "object", description: "JSON schema for entity data" },
+        maxConcurrent: { type: "number", description: "Max concurrent entities (0=unlimited)" },
+        maxConcurrentPerRepo: { type: "number", description: "Max concurrent per repo (0=unlimited)" },
+        createdBy: { type: "string", description: "Creator identifier" },
+      },
+      required: ["name", "initialState"],
+    },
+  },
+  {
+    name: "admin.flow.update",
+    description: "Update a flow's metadata (description, concurrency limits, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string", description: "Flow name to update" },
+        description: { type: "string" },
+        maxConcurrent: { type: "number" },
+        maxConcurrentPerRepo: { type: "number" },
+        initialState: { type: "string" },
+      },
+      required: ["flow_name"],
+    },
+  },
+  {
+    name: "admin.state.create",
+    description: "Add a state to an existing flow.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string", description: "Flow name" },
+        name: { type: "string", description: "State name" },
+        agentRole: { type: "string" },
+        modelTier: { type: "string" },
+        mode: { type: "string", description: "passive or active" },
+        promptTemplate: { type: "string" },
+        constraints: { type: "object" },
+      },
+      required: ["flow_name", "name"],
+    },
+  },
+  {
+    name: "admin.state.update",
+    description: "Update fields on an existing state.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string", description: "Flow name" },
+        state_name: { type: "string", description: "State name to update" },
+        agentRole: { type: "string" },
+        modelTier: { type: "string" },
+        mode: { type: "string" },
+        promptTemplate: { type: "string" },
+        constraints: { type: "object" },
+      },
+      required: ["flow_name", "state_name"],
+    },
+  },
+  {
+    name: "admin.transition.create",
+    description: "Add a transition rule between two states.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string" },
+        fromState: { type: "string" },
+        toState: { type: "string" },
+        trigger: { type: "string" },
+        gateName: { type: "string" },
+        condition: { type: "string" },
+        priority: { type: "number" },
+        spawnFlow: { type: "string" },
+        spawnTemplate: { type: "string" },
+      },
+      required: ["flow_name", "fromState", "toState", "trigger"],
+    },
+  },
+  {
+    name: "admin.transition.update",
+    description: "Update an existing transition rule.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string" },
+        transition_id: { type: "string" },
+        fromState: { type: "string" },
+        toState: { type: "string" },
+        trigger: { type: "string" },
+        gateName: { type: "string" },
+        condition: { type: "string" },
+        priority: { type: "number" },
+        spawnFlow: { type: "string" },
+        spawnTemplate: { type: "string" },
+      },
+      required: ["flow_name", "transition_id"],
+    },
+  },
+  {
+    name: "admin.gate.create",
+    description: "Create a gate definition (command, function, or api).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string" },
+        type: { type: "string", description: "command | function | api" },
+        command: { type: "string" },
+        functionRef: { type: "string" },
+        apiConfig: { type: "object" },
+        timeoutMs: { type: "number" },
+      },
+      required: ["name", "type"],
+    },
+  },
+  {
+    name: "admin.gate.attach",
+    description: "Attach a gate to a transition.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string" },
+        transition_id: { type: "string" },
+        gate_name: { type: "string" },
+      },
+      required: ["flow_name", "transition_id", "gate_name"],
+    },
+  },
+  {
+    name: "admin.flow.snapshot",
+    description: "Create a versioned snapshot of the current flow state.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string" },
+      },
+      required: ["flow_name"],
+    },
+  },
+  {
+    name: "admin.flow.restore",
+    description: "Restore a flow to a previously snapshotted version.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow_name: { type: "string" },
+        version: { type: "number" },
+      },
+      required: ["flow_name", "version"],
+    },
+  },
+  {
+    name: "admin.integration.set",
+    description: "Set or update an integration adapter for a capability.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        capability: { type: "string", description: "e.g. issue-tracker, code-host" },
+        adapter: { type: "string", description: "e.g. linear, github" },
+        config: { type: "object", description: "Adapter-specific configuration" },
+      },
+      required: ["capability", "adapter"],
+    },
+  },
 ];
 
 export function createMcpServer(deps: McpServerDeps): Server {
@@ -129,34 +316,60 @@ export function createMcpServer(deps: McpServerDeps): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     const safeArgs = (args ?? {}) as Record<string, unknown>;
-    try {
-      switch (name) {
-        case "flow.claim":
-          return await handleFlowClaim(deps, safeArgs);
-        case "flow.get_prompt":
-          return await handleFlowGetPrompt(deps, safeArgs);
-        case "flow.report":
-          return await handleFlowReport(deps, safeArgs);
-        case "flow.fail":
-          return await handleFlowFail(deps, safeArgs);
-        case "query.entity":
-          return await handleQueryEntity(deps, safeArgs);
-        case "query.entities":
-          return await handleQueryEntities(deps, safeArgs);
-        case "query.invocations":
-          return await handleQueryInvocations(deps, safeArgs);
-        case "query.flow":
-          return await handleQueryFlow(deps, safeArgs);
-        default:
-          return errorResult(`Unknown tool: ${name}`);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return errorResult(message);
-    }
+    return callToolHandler(deps, name, safeArgs);
   });
 
   return server;
+}
+
+export async function callToolHandler(deps: McpServerDeps, name: string, safeArgs: Record<string, unknown>) {
+  try {
+    switch (name) {
+      case "flow.claim":
+        return await handleFlowClaim(deps, safeArgs);
+      case "flow.get_prompt":
+        return await handleFlowGetPrompt(deps, safeArgs);
+      case "flow.report":
+        return await handleFlowReport(deps, safeArgs);
+      case "flow.fail":
+        return await handleFlowFail(deps, safeArgs);
+      case "query.entity":
+        return await handleQueryEntity(deps, safeArgs);
+      case "query.entities":
+        return await handleQueryEntities(deps, safeArgs);
+      case "query.invocations":
+        return await handleQueryInvocations(deps, safeArgs);
+      case "query.flow":
+        return await handleQueryFlow(deps, safeArgs);
+      case "admin.flow.create":
+        return await handleAdminFlowCreate(deps, safeArgs);
+      case "admin.flow.update":
+        return await handleAdminFlowUpdate(deps, safeArgs);
+      case "admin.state.create":
+        return await handleAdminStateCreate(deps, safeArgs);
+      case "admin.state.update":
+        return await handleAdminStateUpdate(deps, safeArgs);
+      case "admin.transition.create":
+        return await handleAdminTransitionCreate(deps, safeArgs);
+      case "admin.transition.update":
+        return await handleAdminTransitionUpdate(deps, safeArgs);
+      case "admin.gate.create":
+        return await handleAdminGateCreate(deps, safeArgs);
+      case "admin.gate.attach":
+        return await handleAdminGateAttach(deps, safeArgs);
+      case "admin.flow.snapshot":
+        return await handleAdminFlowSnapshot(deps, safeArgs);
+      case "admin.flow.restore":
+        return await handleAdminFlowRestore(deps, safeArgs);
+      case "admin.integration.set":
+        return await handleAdminIntegrationSet(deps, safeArgs);
+      default:
+        return errorResult(`Unknown tool: ${name}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return errorResult(message);
+  }
 }
 
 function jsonResult(data: unknown) {
@@ -397,4 +610,193 @@ export async function startStdioServer(deps: McpServerDeps): Promise<void> {
   const server = createMcpServer(deps);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+// ─── Admin Helpers ───
+
+function validateInput<T>(
+  schema: { safeParse: (data: unknown) => { success: boolean; data?: T; error?: { issues: unknown[] } } },
+  args: Record<string, unknown>,
+): { ok: true; data: T } | { ok: false; result: ReturnType<typeof errorResult> } {
+  const parsed = schema.safeParse(args);
+  if (!parsed.success) {
+    return { ok: false, result: errorResult(`Validation error: ${JSON.stringify(parsed.error?.issues)}`) };
+  }
+  return { ok: true, data: parsed.data as T };
+}
+
+function emitDefinitionChanged(
+  db: BetterSQLite3Database,
+  flowId: string,
+  tool: string,
+  payload: Record<string, unknown>,
+) {
+  db.insert(events)
+    .values({
+      id: crypto.randomUUID(),
+      type: "definition.changed",
+      entityId: null,
+      flowId: flowId || null,
+      payload: { tool, ...payload },
+      emittedAt: Date.now(),
+    })
+    .run();
+}
+
+// ─── Admin Tool Handlers ───
+
+async function handleAdminFlowCreate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminFlowCreateSchema, args);
+  if (!v.ok) return v.result;
+  const flow = await deps.flows.create(v.data);
+  emitDefinitionChanged(deps.db, flow.id, "admin.flow.create", { name: flow.name });
+  return jsonResult(flow);
+}
+
+async function handleAdminFlowUpdate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminFlowUpdateSchema, args);
+  if (!v.ok) return v.result;
+  const { flow_name, ...changes } = v.data;
+  const flow = await deps.flows.getByName(flow_name);
+  if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  await deps.flows.snapshot(flow.id);
+  const updated = await deps.flows.update(flow.id, changes);
+  emitDefinitionChanged(deps.db, flow.id, "admin.flow.update", { name: flow_name, changes });
+  return jsonResult(updated);
+}
+
+async function handleAdminStateCreate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminStateCreateSchema, args);
+  if (!v.ok) return v.result;
+  const { flow_name, ...stateInput } = v.data;
+  const flow = await deps.flows.getByName(flow_name);
+  if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  await deps.flows.snapshot(flow.id);
+  const state = await deps.flows.addState(flow.id, stateInput);
+  emitDefinitionChanged(deps.db, flow.id, "admin.state.create", { name: state.name });
+  return jsonResult(state);
+}
+
+async function handleAdminStateUpdate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminStateUpdateSchema, args);
+  if (!v.ok) return v.result;
+  const { flow_name, state_name, ...changes } = v.data;
+  const flow = await deps.flows.getByName(flow_name);
+  if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  const stateDef = flow.states.find((s) => s.name === state_name);
+  if (!stateDef) return errorResult(`State not found: ${state_name} in flow ${flow_name}`);
+  await deps.flows.snapshot(flow.id);
+  const updated = await deps.flows.updateState(stateDef.id, changes);
+  emitDefinitionChanged(deps.db, flow.id, "admin.state.update", { name: state_name, changes });
+  return jsonResult(updated);
+}
+
+async function handleAdminTransitionCreate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminTransitionCreateSchema, args);
+  if (!v.ok) return v.result;
+  const { flow_name, gateName, ...transitionInput } = v.data;
+  const flow = await deps.flows.getByName(flow_name);
+  if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  await deps.flows.snapshot(flow.id);
+  let gateId: string | undefined;
+  if (gateName) {
+    const gate = await deps.gates.getByName(gateName);
+    if (!gate) return errorResult(`Gate not found: ${gateName}`);
+    gateId = gate.id;
+  }
+  const transition = await deps.flows.addTransition(flow.id, { ...transitionInput, gateId });
+  emitDefinitionChanged(deps.db, flow.id, "admin.transition.create", {
+    fromState: transitionInput.fromState,
+    toState: transitionInput.toState,
+    trigger: transitionInput.trigger,
+  });
+  return jsonResult(transition);
+}
+
+async function handleAdminTransitionUpdate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminTransitionUpdateSchema, args);
+  if (!v.ok) return v.result;
+  const { flow_name, transition_id, gateName, ...changes } = v.data;
+  const flow = await deps.flows.getByName(flow_name);
+  if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  const existing = flow.transitions.find((t) => t.id === transition_id);
+  if (!existing) return errorResult(`Transition not found: ${transition_id} in flow ${flow_name}`);
+  await deps.flows.snapshot(flow.id);
+  const updateChanges: Record<string, unknown> = { ...changes };
+  if (gateName !== undefined) {
+    if (gateName) {
+      const gate = await deps.gates.getByName(gateName);
+      if (!gate) return errorResult(`Gate not found: ${gateName}`);
+      updateChanges.gateId = gate.id;
+    } else {
+      updateChanges.gateId = null;
+    }
+  }
+  const updated = await deps.flows.updateTransition(
+    transition_id,
+    updateChanges as import("../repositories/interfaces.js").UpdateTransitionInput,
+  );
+  emitDefinitionChanged(deps.db, flow.id, "admin.transition.update", { transition_id });
+  return jsonResult(updated);
+}
+
+async function handleAdminGateCreate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminGateCreateSchema, args);
+  if (!v.ok) return v.result;
+  const gate = await deps.gates.create(v.data);
+  emitDefinitionChanged(deps.db, "", "admin.gate.create", { name: gate.name });
+  return jsonResult(gate);
+}
+
+async function handleAdminGateAttach(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminGateAttachSchema, args);
+  if (!v.ok) return v.result;
+  const { flow_name, transition_id, gate_name } = v.data;
+  const flow = await deps.flows.getByName(flow_name);
+  if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  const existing = flow.transitions.find((t) => t.id === transition_id);
+  if (!existing) return errorResult(`Transition not found: ${transition_id} in flow ${flow_name}`);
+  const gate = await deps.gates.getByName(gate_name);
+  if (!gate) return errorResult(`Gate not found: ${gate_name}`);
+  await deps.flows.snapshot(flow.id);
+  const updated = await deps.flows.updateTransition(transition_id, { gateId: gate.id });
+  emitDefinitionChanged(deps.db, flow.id, "admin.gate.attach", { transition_id, gate_name });
+  return jsonResult(updated);
+}
+
+async function handleAdminFlowSnapshot(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminFlowSnapshotSchema, args);
+  if (!v.ok) return v.result;
+  const flow = await deps.flows.getByName(v.data.flow_name);
+  if (!flow) return errorResult(`Flow not found: ${v.data.flow_name}`);
+  const version = await deps.flows.snapshot(flow.id);
+  return jsonResult(version);
+}
+
+async function handleAdminFlowRestore(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminFlowRestoreSchema, args);
+  if (!v.ok) return v.result;
+  const flow = await deps.flows.getByName(v.data.flow_name);
+  if (!flow) return errorResult(`Flow not found: ${v.data.flow_name}`);
+  await deps.flows.snapshot(flow.id);
+  await deps.flows.restore(flow.id, v.data.version);
+  emitDefinitionChanged(deps.db, flow.id, "admin.flow.restore", { version: v.data.version });
+  return jsonResult({ restored: true, version: v.data.version });
+}
+
+async function handleAdminIntegrationSet(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminIntegrationSetSchema, args);
+  if (!v.ok) return v.result;
+  const { capability, adapter, config } = v.data;
+  const id = crypto.randomUUID();
+  deps.db
+    .insert(integrationConfig)
+    .values({ id, capability, adapter, config: (config ?? null) as Record<string, unknown> | null })
+    .onConflictDoUpdate({
+      target: integrationConfig.capability,
+      set: { adapter, config: (config ?? null) as Record<string, unknown> | null },
+    })
+    .run();
+  emitDefinitionChanged(deps.db, "", "admin.integration.set", { capability, adapter });
+  return jsonResult({ capability, adapter, config: config ?? null });
 }
