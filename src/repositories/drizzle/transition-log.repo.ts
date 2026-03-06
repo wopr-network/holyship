@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ITransitionLogRepository, TransitionLog } from "../interfaces.js";
@@ -10,19 +11,9 @@ export class DrizzleTransitionLogRepository implements ITransitionLogRepository 
   constructor(private db: Db) {}
 
   async record(log: Omit<TransitionLog, "id">): Promise<TransitionLog> {
-    const id = crypto.randomUUID();
-    this.db
-      .insert(entityHistory)
-      .values({
-        id,
-        entityId: log.entityId,
-        fromState: log.fromState,
-        toState: log.toState,
-        trigger: log.trigger,
-        invocationId: log.invocationId,
-        timestamp: log.timestamp.getTime(),
-      })
-      .run();
+    const id = randomUUID();
+    // entityHistory is already written by DrizzleEntityRepository.transition();
+    // inserting again here would create duplicate rows.
     return { id, ...log };
   }
 

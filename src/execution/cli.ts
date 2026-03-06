@@ -132,7 +132,6 @@ program
     if (opts.transport === "sse") {
       const { SSEServerTransport } = await import("@modelcontextprotocol/sdk/server/sse.js");
       const http = await import("node:http");
-      const server = createMcpServer(deps);
       const port = parseInt(opts.port, 10);
 
       // Map session IDs to transports for POST routing
@@ -143,6 +142,7 @@ program
           const transport = new SSEServerTransport("/messages", res);
           transports.set(transport.sessionId, transport);
           res.on("close", () => transports.delete(transport.sessionId));
+          const server = createMcpServer(deps);
           await server.connect(transport);
         } else if (req.url?.startsWith("/messages") && req.method === "POST") {
           const url = new URL(req.url, `http://localhost:${port}`);
@@ -171,7 +171,13 @@ program
       process.on("SIGTERM", shutdown);
     } else {
       // stdio (default)
-      console.log("Starting MCP server on stdio...");
+      console.error("Starting MCP server on stdio...");
+      const cleanup = () => {
+        sqlite.close();
+        process.exit(0);
+      };
+      process.on("SIGINT", cleanup);
+      process.on("SIGTERM", cleanup);
       await startStdioServer(deps);
     }
   });
@@ -227,9 +233,13 @@ program
     });
 
     const ac = new AbortController();
+    let closed = false;
     const shutdown = () => {
       ac.abort();
-      sqlite.close();
+      if (!closed) {
+        closed = true;
+        sqlite.close();
+      }
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
@@ -245,7 +255,10 @@ program
       signal: ac.signal,
     });
 
-    sqlite.close();
+    if (!closed) {
+      closed = true;
+      sqlite.close();
+    }
   });
 
 // ─── status ───
