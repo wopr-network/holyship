@@ -17,7 +17,7 @@ export const AdminFlowCreateSchema = z.object({
   maxConcurrent: z.number().int().min(0).optional(),
   maxConcurrentPerRepo: z.number().int().min(0).optional(),
   createdBy: z.string().optional(),
-  states: z.array(AdminStateInlineSchema).min(1, "Flow must have at least one state definition"),
+  states: z.array(AdminStateInlineSchema).min(1, "Flow must have at least one state definition").optional(),
 });
 
 export const AdminFlowUpdateSchema = z.object({

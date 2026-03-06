@@ -646,12 +646,14 @@ async function handleAdminFlowCreate(deps: McpServerDeps, args: Record<string, u
   const v = validateInput(AdminFlowCreateSchema, args);
   if (!v.ok) return v.result;
   const { states, ...flowInput } = v.data;
-  const stateNames = states.map((s) => s.name);
-  if (!stateNames.includes(flowInput.initialState)) {
-    return errorResult(`initialState '${flowInput.initialState}' must be included in the states array`);
+  if (states !== undefined) {
+    const stateNames = states.map((s) => s.name);
+    if (!stateNames.includes(flowInput.initialState)) {
+      return errorResult(`initialState '${flowInput.initialState}' must be included in the states array`);
+    }
   }
   const flow = await deps.flows.create(flowInput);
-  for (const stateDef of states) {
+  for (const stateDef of states ?? []) {
     await deps.flows.addState(flow.id, stateDef);
   }
   const fullFlow = await deps.flows.get(flow.id);
