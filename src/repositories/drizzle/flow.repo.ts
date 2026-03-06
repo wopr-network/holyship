@@ -288,7 +288,18 @@ export class DrizzleFlowRepository implements IFlowRepository {
       .all();
     if (versionRows.length === 0) throw new Error(`Version ${version} not found for flow ${flowId}`);
 
-    const snap = versionRows[0].snapshot as { states: State[]; transitions: Transition[] };
+    const snap = versionRows[0].snapshot as {
+      name: string;
+      description: string | null;
+      entitySchema: Record<string, unknown> | null;
+      initialState: string;
+      maxConcurrent: number;
+      maxConcurrentPerRepo: number;
+      version: number;
+      createdBy: string | null;
+      states: State[];
+      transitions: Transition[];
+    };
 
     this.db.transaction((tx) => {
       tx.delete(transitionRules).where(eq(transitionRules.flowId, flowId)).run();
@@ -327,7 +338,20 @@ export class DrizzleFlowRepository implements IFlowRepository {
           .run();
       }
 
-      tx.update(flowDefinitions).set({ updatedAt: Date.now() }).where(eq(flowDefinitions.id, flowId)).run();
+      tx.update(flowDefinitions)
+        .set({
+          name: snap.name,
+          description: snap.description,
+          entitySchema: snap.entitySchema,
+          initialState: snap.initialState,
+          maxConcurrent: snap.maxConcurrent,
+          maxConcurrentPerRepo: snap.maxConcurrentPerRepo,
+          version: snap.version,
+          createdBy: snap.createdBy,
+          updatedAt: Date.now(),
+        })
+        .where(eq(flowDefinitions.id, flowId))
+        .run();
     });
   }
 }

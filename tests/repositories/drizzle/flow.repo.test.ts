@@ -251,6 +251,45 @@ describe("DrizzleFlowRepository", () => {
       expect(restored!.transitions[0].trigger).toBe("submit");
     });
 
+    it("restores top-level flow metadata from snapshot", async () => {
+      const flow = await repo.create({
+        name: "meta-flow",
+        description: "original description",
+        initialState: "open",
+        maxConcurrent: 3,
+        maxConcurrentPerRepo: 1,
+        createdBy: "user-a",
+      });
+
+      // Snapshot v1
+      await repo.snapshot(flow.id);
+
+      // Modify top-level metadata
+      await repo.update(flow.id, {
+        name: "meta-flow-modified",
+        description: "changed description",
+        initialState: "closed",
+        maxConcurrent: 10,
+        maxConcurrentPerRepo: 5,
+      });
+
+      // Confirm mutation
+      const modified = await repo.get(flow.id);
+      expect(modified!.name).toBe("meta-flow-modified");
+
+      // Restore to v1
+      await repo.restore(flow.id, 1);
+
+      // Top-level metadata must be restored
+      const restored = await repo.get(flow.id);
+      expect(restored!.name).toBe("meta-flow");
+      expect(restored!.description).toBe("original description");
+      expect(restored!.initialState).toBe("open");
+      expect(restored!.maxConcurrent).toBe(3);
+      expect(restored!.maxConcurrentPerRepo).toBe(1);
+      expect(restored!.createdBy).toBe("user-a");
+    });
+
     it("throws for non-existent version", async () => {
       const flow = await repo.create({ name: "nosnap", initialState: "s" });
       await expect(repo.restore(flow.id, 99)).rejects.toThrow("Version 99 not found");
