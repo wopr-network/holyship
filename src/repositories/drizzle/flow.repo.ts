@@ -118,7 +118,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
     return this.hydrateFlow(rows[0]);
   }
 
-  async list(): Promise<Flow[]> {
+  async listAll(): Promise<Flow[]> {
     const rows = this.db.select().from(flowDefinitions).all();
     return rows.map((row) => this.hydrateFlow(row));
   }

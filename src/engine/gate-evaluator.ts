@@ -16,7 +16,10 @@ export async function evaluateGate(gate: Gate, entity: Entity, gateRepo: IGateRe
   let output = "";
 
   if (gate.type === "command") {
-    const result = await runCommand(gate.command ?? "", gate.timeoutMs);
+    if (!gate.command) {
+      return { passed: false, output: "Gate command is not configured" };
+    }
+    const result = await runCommand(gate.command, gate.timeoutMs);
     passed = result.exitCode === 0;
     output = result.output;
   } else if (gate.type === "function") {

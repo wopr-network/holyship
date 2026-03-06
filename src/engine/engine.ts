@@ -76,7 +76,7 @@ export class Engine {
     if (!flow) throw new Error(`Flow "${entity.flowId}" not found`);
 
     // 3. Find transition
-    const transition = findTransition(flow, entity.state, signal);
+    const transition = findTransition(flow, entity.state, signal, { entity }, true);
     if (!transition)
       throw new Error(`No transition from "${entity.state}" on signal "${signal}" in flow "${flow.name}"`);
 
@@ -108,17 +108,7 @@ export class Engine {
     // 5. Transition entity
     const updated = await this.entityRepo.transition(entityId, transition.toState, signal, artifacts);
 
-    // 6. Record transition log
-    await this.transitionLogRepo.record({
-      entityId,
-      fromState: entity.state,
-      toState: transition.toState,
-      trigger: signal,
-      invocationId: null,
-      timestamp: new Date(),
-    });
-
-    // 7. Emit transition event
+    // 6. Emit transition event
     await this.eventEmitter.emit({
       type: "entity.transitioned",
       entityId,
@@ -136,7 +126,7 @@ export class Engine {
       terminal: false,
     };
 
-    // 8. Create invocation if new state has an agent role
+    // 7. Create invocation if new state has an agent role
     const newStateDef = flow.states.find((s) => s.name === transition.toState);
     if (newStateDef?.agentRole) {
       const canCreate = await this.checkConcurrency(flow, entity);
@@ -159,6 +149,16 @@ export class Engine {
         });
       }
     }
+
+    // 8. Record transition log — after invocation creation so invocationId is available
+    await this.transitionLogRepo.record({
+      entityId,
+      fromState: entity.state,
+      toState: transition.toState,
+      trigger: signal,
+      invocationId: result.invocationId ?? null,
+      timestamp: new Date(),
+    });
 
     // 9. Spawn child flows
     const spawned = await executeSpawn(transition, updated, this.flowRepo, this.entityRepo);
@@ -226,8 +226,37 @@ export class Engine {
     }
 
     for (const flow of flows) {
-      const claimableStates = flow.states.filter((s) => s.agentRole === role);
+      // Prefer claiming an existing unclaimed invocation created by processSignal
+      // to avoid creating a duplicate. Fall back to creating a new one if none exist.
+      const unclaimed = await this.invocationRepo.findUnclaimed(flow.id, role);
 
+      for (const pending of unclaimed) {
+        const claimed = await this.entityRepo.claim(flow.id, pending.stage, `agent:${role}`);
+        if (claimed) {
+          const claimedInvocation = await this.invocationRepo.claim(pending.id, `agent:${role}`);
+          if (!claimedInvocation) continue;
+
+          const state = flow.states.find((s) => s.name === pending.stage);
+          const build = state ? buildInvocation(state, claimed) : { prompt: pending.prompt, context: null };
+
+          await this.eventEmitter.emit({
+            type: "entity.claimed",
+            entityId: claimed.id,
+            flowId: flow.id,
+            agentId: `agent:${role}`,
+            emittedAt: new Date(),
+          });
+          return {
+            entityId: claimed.id,
+            invocationId: claimedInvocation.id,
+            prompt: build.prompt,
+            context: build.context,
+          };
+        }
+      }
+
+      // No pre-existing unclaimed invocations — claim entity directly and create invocation
+      const claimableStates = flow.states.filter((s) => s.agentRole === role);
       for (const state of claimableStates) {
         const claimed = await this.entityRepo.claim(flow.id, state.name, `agent:${role}`);
         if (claimed) {
@@ -267,7 +296,7 @@ export class Engine {
     };
   }
 
-  startReaper(intervalMs: number): () => void {
+  startReaper(intervalMs: number, entityTtlMs: number = 60_000): () => void {
     const timer = setInterval(() => {
       (async () => {
         const expired = await this.invocationRepo.reapExpired();
@@ -279,7 +308,7 @@ export class Engine {
             emittedAt: new Date(),
           });
         }
-        await this.entityRepo.reapExpired(intervalMs);
+        await this.entityRepo.reapExpired(entityTtlMs);
       })().catch((err) => {
         console.error("[reaper] error:", err);
       });
