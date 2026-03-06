@@ -14,8 +14,8 @@ export interface Entity {
   id: string;
   flowId: string;
   state: string;
-  refs: Refs;
-  artifacts: Artifacts;
+  refs: Refs | null;
+  artifacts: Artifacts | null;
   claimedBy: string | null;
   claimedAt: Date | null;
   flowVersion: number;
@@ -55,6 +55,7 @@ export interface GateResult {
 
 /** Audit-log entry for an entity state transition */
 export interface TransitionLog {
+  id: string;
   entityId: string;
   fromState: string | null;
   toState: string;
