@@ -52,6 +52,22 @@ The entity cannot reach `merging` without the reviewer saying `clean`. It cannot
 
 That's one flow. You define others — incident response, deployments, onboarding — each with their own states, their own gates, their own escalation path. DEFCON doesn't care what the work is. It cares that the work earns each level before the next one unlocks.
 
+### Under the Hood
+
+That flow diagram looks simple. But every arrow is doing real work. Here's what's actually happening at each boundary:
+
+**Before the coder can push code** — a pre-commit gate runs. TypeScript compilation (`tsc --noEmit`). Linter (`biome check`). Formatter (`biome format`). If any of those fail, the push doesn't happen. The agent doesn't get to decide "the lint error is minor, I'll fix it later." The gate decides. And the gate says no.
+
+**Before the entity can enter `reviewing`** — CI runs on the PR. The full test suite. The type checker. The linter again, on the full repo this time. If CI fails, the reviewer never even starts. The entity sits in `coding` until the coder produces work that passes. No partial credit.
+
+**Before the reviewer can say `clean`** — it's not just the reviewer's opinion. The reviewer waits for every automated review bot to finish. Code quality scanners. Security analyzers. Dependency auditors. The reviewer reads all of their output — every inline comment, every finding. A single unresolved finding means the verdict is `issues`, not `clean`. The reviewer doesn't get to overrule the bots.
+
+**Before the entity can enter `merging`** — the `clean` signal has to come from the reviewing state. There is no transition from `coding` to `merging`. There is no transition from `fixing` to `merging`. The only path to merge goes through review. Every time.
+
+**Before the merge completes** — CI runs again on the merge commit. The merge queue validates the change against everything else that landed since the PR was opened. If it conflicts, if a test breaks, the merge fails. The entity goes back to `reviewing`.
+
+These aren't suggestions in a prompt. They're shell commands the engine executes. `tsc` either exits 0 or it doesn't. `biome check` either passes or it doesn't. The gate is a process that returns a status code. There's nothing to interpret. Nothing to negotiate. Nothing to skip.
+
 ## The Engine
 
 A **flow** is a state machine. Entities enter it and move through states. At each state an agent does work. At each boundary a deterministic gate verifies the output. Transitions fire on signals — not parsed natural language, not regex, but typed strings agents emit via tool call. The entire definition lives in a database and can be mutated at runtime.
