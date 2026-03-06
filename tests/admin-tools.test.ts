@@ -7,6 +7,8 @@ import * as schema from "../src/repositories/drizzle/schema.js";
 import { DrizzleFlowRepository } from "../src/repositories/drizzle/flow.repo.js";
 import { DrizzleGateRepository } from "../src/repositories/drizzle/gate.repo.js";
 import { DrizzleEntityRepository } from "../src/repositories/drizzle/entity.repo.js";
+import { DrizzleEventRepository } from "../src/repositories/drizzle/event.repo.js";
+import { DrizzleIntegrationRepository } from "../src/repositories/drizzle/integration.repo.js";
 import { DrizzleInvocationRepository } from "../src/repositories/drizzle/invocation.repo.js";
 import { callToolHandler } from "../src/execution/mcp-server.js";
 import type { McpServerDeps } from "../src/execution/mcp-server.js";
@@ -45,7 +47,8 @@ describe("admin MCP tools", () => {
       invocations: new DrizzleInvocationRepository(db as any),
       gates: new DrizzleGateRepository(db as any),
       transitions: makeTransitionRepo(),
-      db: db as any,
+      eventRepo: new DrizzleEventRepository(db as any),
+      integrationRepo: new DrizzleIntegrationRepository(db as any),
     };
   });
 
@@ -54,6 +57,7 @@ describe("admin MCP tools", () => {
       name: "test-flow",
       initialState: "open",
       description: "A test flow",
+      states: [{ name: "open" }],
     });
     expect(result.isError).toBeUndefined();
     const parsed = JSON.parse(result.content[0].text);
@@ -67,7 +71,7 @@ describe("admin MCP tools", () => {
   });
 
   it("admin.state.create adds a state to an existing flow", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
+    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open", states: [{ name: "open" }] });
     const result = await callToolHandler(deps, "admin.state.create", {
       flow_name: "test-flow",
       name: "review",
@@ -89,7 +93,7 @@ describe("admin MCP tools", () => {
   });
 
   it("admin.flow.update updates flow metadata", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
+    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open", states: [{ name: "open" }] });
     const result = await callToolHandler(deps, "admin.flow.update", {
       flow_name: "test-flow",
       description: "Updated description",
@@ -100,7 +104,11 @@ describe("admin MCP tools", () => {
   });
 
   it("admin.transition.create adds a transition", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
+    await callToolHandler(deps, "admin.flow.create", {
+      name: "test-flow",
+      initialState: "open",
+      states: [{ name: "open" }, { name: "review" }],
+    });
     const result = await callToolHandler(deps, "admin.transition.create", {
       flow_name: "test-flow",
       fromState: "open",
@@ -113,8 +121,42 @@ describe("admin MCP tools", () => {
     expect(parsed.toState).toBe("review");
   });
 
+  it("admin.transition.create rejects unknown fromState", async () => {
+    await callToolHandler(deps, "admin.flow.create", {
+      name: "test-flow",
+      initialState: "open",
+      states: [{ name: "open" }],
+    });
+    const result = await callToolHandler(deps, "admin.transition.create", {
+      flow_name: "test-flow",
+      fromState: "nonexistent",
+      toState: "open",
+      trigger: "go",
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("admin.transition.create rejects unknown toState", async () => {
+    await callToolHandler(deps, "admin.flow.create", {
+      name: "test-flow",
+      initialState: "open",
+      states: [{ name: "open" }],
+    });
+    const result = await callToolHandler(deps, "admin.transition.create", {
+      flow_name: "test-flow",
+      fromState: "open",
+      toState: "nonexistent",
+      trigger: "go",
+    });
+    expect(result.isError).toBe(true);
+  });
+
   it("admin.gate.create + admin.gate.attach", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
+    await callToolHandler(deps, "admin.flow.create", {
+      name: "test-flow",
+      initialState: "open",
+      states: [{ name: "open" }, { name: "review" }],
+    });
 
     const trResult = await callToolHandler(deps, "admin.transition.create", {
       flow_name: "test-flow",
@@ -144,8 +186,7 @@ describe("admin MCP tools", () => {
   });
 
   it("admin.flow.snapshot + admin.flow.restore roundtrips", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
-    await callToolHandler(deps, "admin.state.create", { flow_name: "test-flow", name: "open" });
+    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open", states: [{ name: "open" }] });
 
     const snapResult = await callToolHandler(deps, "admin.flow.snapshot", { flow_name: "test-flow" });
     expect(snapResult.isError).toBeUndefined();
@@ -190,7 +231,7 @@ describe("admin MCP tools", () => {
   });
 
   it("mutations auto-snapshot before modifying existing flow", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
+    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open", states: [{ name: "open" }] });
 
     // This should trigger an auto-snapshot
     await callToolHandler(deps, "admin.flow.update", {
@@ -208,7 +249,7 @@ describe("admin MCP tools", () => {
   });
 
   it("mutations emit definition.changed events", async () => {
-    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open" });
+    await callToolHandler(deps, "admin.flow.create", { name: "test-flow", initialState: "open", states: [{ name: "open" }] });
 
     const eventRows = db
       .select()
@@ -219,28 +260,18 @@ describe("admin MCP tools", () => {
   });
 
   it("full pipeline: create flow → add states → add transitions → gate → entity created in initial state", async () => {
-    // 1. Create flow
-    await callToolHandler(deps, "admin.flow.create", { name: "pipeline", initialState: "open" });
+    // 1. Create flow with states inline
+    await callToolHandler(deps, "admin.flow.create", {
+      name: "pipeline",
+      initialState: "open",
+      states: [
+        { name: "open", agentRole: "planner", mode: "passive", promptTemplate: "Plan the work" },
+        { name: "in-progress", agentRole: "coder", mode: "passive", promptTemplate: "Implement the plan" },
+        { name: "done" },
+      ],
+    });
 
-    // 2. Add states
-    await callToolHandler(deps, "admin.state.create", {
-      flow_name: "pipeline",
-      name: "open",
-      agentRole: "planner",
-      mode: "passive",
-      promptTemplate: "Plan the work",
-    });
-    await callToolHandler(deps, "admin.state.create", {
-      flow_name: "pipeline",
-      name: "in-progress",
-      agentRole: "coder",
-      mode: "passive",
-      promptTemplate: "Implement the plan",
-    });
-    await callToolHandler(deps, "admin.state.create", {
-      flow_name: "pipeline",
-      name: "done",
-    });
+    // 2. (states already added inline above)
 
     // 3. Add transitions
     await callToolHandler(deps, "admin.transition.create", {

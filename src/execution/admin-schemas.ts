@@ -1,5 +1,14 @@
 import { z } from "zod/v4";
 
+const AdminStateInlineSchema = z.object({
+  name: z.string().min(1),
+  agentRole: z.string().optional(),
+  modelTier: z.string().optional(),
+  mode: z.enum(["passive", "active"]).optional(),
+  promptTemplate: z.string().optional(),
+  constraints: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const AdminFlowCreateSchema = z.object({
   name: z.string().min(1),
   initialState: z.string().min(1),
@@ -8,6 +17,7 @@ export const AdminFlowCreateSchema = z.object({
   maxConcurrent: z.number().int().min(0).optional(),
   maxConcurrentPerRepo: z.number().int().min(0).optional(),
   createdBy: z.string().optional(),
+  states: z.array(AdminStateInlineSchema).min(1, "Flow must have at least one state definition"),
 });
 
 export const AdminFlowUpdateSchema = z.object({
@@ -43,7 +53,7 @@ export const AdminTransitionCreateSchema = z.object({
   fromState: z.string().min(1),
   toState: z.string().min(1),
   trigger: z.string().min(1),
-  gateName: z.string().optional(),
+  gateName: z.string().min(1).optional(),
   condition: z.string().optional(),
   priority: z.number().int().min(0).optional(),
   spawnFlow: z.string().optional(),
@@ -56,11 +66,11 @@ export const AdminTransitionUpdateSchema = z.object({
   fromState: z.string().min(1).optional(),
   toState: z.string().min(1).optional(),
   trigger: z.string().min(1).optional(),
-  gateName: z.string().optional(),
-  condition: z.string().optional(),
-  priority: z.number().int().min(0).optional(),
-  spawnFlow: z.string().optional(),
-  spawnTemplate: z.string().optional(),
+  gateName: z.string().min(1).optional(),
+  condition: z.string().nullable().optional(),
+  priority: z.number().int().min(0).nullable().optional(),
+  spawnFlow: z.string().nullable().optional(),
+  spawnTemplate: z.string().nullable().optional(),
 });
 
 export const AdminGateCreateSchema = z.discriminatedUnion("type", [

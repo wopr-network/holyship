@@ -2,12 +2,12 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { events, integrationConfig } from "../repositories/drizzle/schema.js";
 import type {
   IEntityRepository,
+  IEventRepository,
   IFlowRepository,
   IGateRepository,
+  IIntegrationRepository,
   IInvocationRepository,
   ITransitionLogRepository,
 } from "../repositories/interfaces.js";
@@ -31,7 +31,8 @@ export interface McpServerDeps {
   invocations: IInvocationRepository;
   gates: IGateRepository;
   transitions: ITransitionLogRepository;
-  db: BetterSQLite3Database;
+  eventRepo: IEventRepository;
+  integrationRepo: IIntegrationRepository;
 }
 
 const TOOL_DEFINITIONS = [
@@ -136,19 +137,24 @@ const TOOL_DEFINITIONS = [
   // ─── Admin Tools ───
   {
     name: "admin.flow.create",
-    description: "Create a new flow definition.",
+    description: "Create a new flow definition with its initial states.",
     inputSchema: {
       type: "object" as const,
       properties: {
         name: { type: "string", description: "Unique flow name" },
-        initialState: { type: "string", description: "Name of the initial state" },
+        initialState: { type: "string", description: "Name of the initial state (must be in states array)" },
         description: { type: "string", description: "Flow description" },
         entitySchema: { type: "object", description: "JSON schema for entity data" },
         maxConcurrent: { type: "number", description: "Max concurrent entities (0=unlimited)" },
         maxConcurrentPerRepo: { type: "number", description: "Max concurrent per repo (0=unlimited)" },
         createdBy: { type: "string", description: "Creator identifier" },
+        states: {
+          type: "array",
+          description: "State definitions (at least one required; must include initialState)",
+          items: { type: "object" },
+        },
       },
-      required: ["name", "initialState"],
+      required: ["name", "initialState", "states"],
     },
   },
   {
@@ -626,21 +632,12 @@ function validateInput<T>(
 }
 
 function emitDefinitionChanged(
-  db: BetterSQLite3Database,
-  flowId: string,
+  eventRepo: IEventRepository,
+  flowId: string | null,
   tool: string,
   payload: Record<string, unknown>,
 ) {
-  db.insert(events)
-    .values({
-      id: crypto.randomUUID(),
-      type: "definition.changed",
-      entityId: null,
-      flowId: flowId || null,
-      payload: { tool, ...payload },
-      emittedAt: Date.now(),
-    })
-    .run();
+  void eventRepo.emitDefinitionChanged(flowId, tool, payload);
 }
 
 // ─── Admin Tool Handlers ───
@@ -648,9 +645,18 @@ function emitDefinitionChanged(
 async function handleAdminFlowCreate(deps: McpServerDeps, args: Record<string, unknown>) {
   const v = validateInput(AdminFlowCreateSchema, args);
   if (!v.ok) return v.result;
-  const flow = await deps.flows.create(v.data);
-  emitDefinitionChanged(deps.db, flow.id, "admin.flow.create", { name: flow.name });
-  return jsonResult(flow);
+  const { states, ...flowInput } = v.data;
+  const stateNames = states.map((s) => s.name);
+  if (!stateNames.includes(flowInput.initialState)) {
+    return errorResult(`initialState '${flowInput.initialState}' must be included in the states array`);
+  }
+  const flow = await deps.flows.create(flowInput);
+  for (const stateDef of states) {
+    await deps.flows.addState(flow.id, stateDef);
+  }
+  const fullFlow = await deps.flows.get(flow.id);
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.flow.create", { name: flow.name });
+  return jsonResult(fullFlow);
 }
 
 async function handleAdminFlowUpdate(deps: McpServerDeps, args: Record<string, unknown>) {
@@ -661,7 +667,7 @@ async function handleAdminFlowUpdate(deps: McpServerDeps, args: Record<string, u
   if (!flow) return errorResult(`Flow not found: ${flow_name}`);
   await deps.flows.snapshot(flow.id);
   const updated = await deps.flows.update(flow.id, changes);
-  emitDefinitionChanged(deps.db, flow.id, "admin.flow.update", { name: flow_name, changes });
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.flow.update", { name: flow_name, changes });
   return jsonResult(updated);
 }
 
@@ -673,7 +679,7 @@ async function handleAdminStateCreate(deps: McpServerDeps, args: Record<string, 
   if (!flow) return errorResult(`Flow not found: ${flow_name}`);
   await deps.flows.snapshot(flow.id);
   const state = await deps.flows.addState(flow.id, stateInput);
-  emitDefinitionChanged(deps.db, flow.id, "admin.state.create", { name: state.name });
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.state.create", { name: state.name });
   return jsonResult(state);
 }
 
@@ -687,7 +693,7 @@ async function handleAdminStateUpdate(deps: McpServerDeps, args: Record<string, 
   if (!stateDef) return errorResult(`State not found: ${state_name} in flow ${flow_name}`);
   await deps.flows.snapshot(flow.id);
   const updated = await deps.flows.updateState(stateDef.id, changes);
-  emitDefinitionChanged(deps.db, flow.id, "admin.state.update", { name: state_name, changes });
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.state.update", { name: state_name, changes });
   return jsonResult(updated);
 }
 
@@ -697,6 +703,13 @@ async function handleAdminTransitionCreate(deps: McpServerDeps, args: Record<str
   const { flow_name, gateName, ...transitionInput } = v.data;
   const flow = await deps.flows.getByName(flow_name);
   if (!flow) return errorResult(`Flow not found: ${flow_name}`);
+  const stateNames = flow.states.map((s) => s.name);
+  if (!stateNames.includes(transitionInput.fromState)) {
+    return errorResult(`State not found: '${transitionInput.fromState}' in flow '${flow_name}'`);
+  }
+  if (!stateNames.includes(transitionInput.toState)) {
+    return errorResult(`State not found: '${transitionInput.toState}' in flow '${flow_name}'`);
+  }
   await deps.flows.snapshot(flow.id);
   let gateId: string | undefined;
   if (gateName) {
@@ -705,7 +718,7 @@ async function handleAdminTransitionCreate(deps: McpServerDeps, args: Record<str
     gateId = gate.id;
   }
   const transition = await deps.flows.addTransition(flow.id, { ...transitionInput, gateId });
-  emitDefinitionChanged(deps.db, flow.id, "admin.transition.create", {
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.transition.create", {
     fromState: transitionInput.fromState,
     toState: transitionInput.toState,
     trigger: transitionInput.trigger,
@@ -721,6 +734,13 @@ async function handleAdminTransitionUpdate(deps: McpServerDeps, args: Record<str
   if (!flow) return errorResult(`Flow not found: ${flow_name}`);
   const existing = flow.transitions.find((t) => t.id === transition_id);
   if (!existing) return errorResult(`Transition not found: ${transition_id} in flow ${flow_name}`);
+  const stateNames = flow.states.map((s) => s.name);
+  if (changes.fromState !== undefined && !stateNames.includes(changes.fromState)) {
+    return errorResult(`State not found: '${changes.fromState}' in flow '${flow_name}'`);
+  }
+  if (changes.toState !== undefined && !stateNames.includes(changes.toState)) {
+    return errorResult(`State not found: '${changes.toState}' in flow '${flow_name}'`);
+  }
   await deps.flows.snapshot(flow.id);
   const updateChanges: Record<string, unknown> = { ...changes };
   if (gateName !== undefined) {
@@ -736,7 +756,7 @@ async function handleAdminTransitionUpdate(deps: McpServerDeps, args: Record<str
     transition_id,
     updateChanges as import("../repositories/interfaces.js").UpdateTransitionInput,
   );
-  emitDefinitionChanged(deps.db, flow.id, "admin.transition.update", { transition_id });
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.transition.update", { transition_id });
   return jsonResult(updated);
 }
 
@@ -744,7 +764,7 @@ async function handleAdminGateCreate(deps: McpServerDeps, args: Record<string, u
   const v = validateInput(AdminGateCreateSchema, args);
   if (!v.ok) return v.result;
   const gate = await deps.gates.create(v.data);
-  emitDefinitionChanged(deps.db, "", "admin.gate.create", { name: gate.name });
+  emitDefinitionChanged(deps.eventRepo, null, "admin.gate.create", { name: gate.name });
   return jsonResult(gate);
 }
 
@@ -760,7 +780,7 @@ async function handleAdminGateAttach(deps: McpServerDeps, args: Record<string, u
   if (!gate) return errorResult(`Gate not found: ${gate_name}`);
   await deps.flows.snapshot(flow.id);
   const updated = await deps.flows.updateTransition(transition_id, { gateId: gate.id });
-  emitDefinitionChanged(deps.db, flow.id, "admin.gate.attach", { transition_id, gate_name });
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.gate.attach", { transition_id, gate_name });
   return jsonResult(updated);
 }
 
@@ -780,7 +800,7 @@ async function handleAdminFlowRestore(deps: McpServerDeps, args: Record<string, 
   if (!flow) return errorResult(`Flow not found: ${v.data.flow_name}`);
   await deps.flows.snapshot(flow.id);
   await deps.flows.restore(flow.id, v.data.version);
-  emitDefinitionChanged(deps.db, flow.id, "admin.flow.restore", { version: v.data.version });
+  emitDefinitionChanged(deps.eventRepo, flow.id, "admin.flow.restore", { version: v.data.version });
   return jsonResult({ restored: true, version: v.data.version });
 }
 
@@ -788,15 +808,7 @@ async function handleAdminIntegrationSet(deps: McpServerDeps, args: Record<strin
   const v = validateInput(AdminIntegrationSetSchema, args);
   if (!v.ok) return v.result;
   const { capability, adapter, config } = v.data;
-  const id = crypto.randomUUID();
-  deps.db
-    .insert(integrationConfig)
-    .values({ id, capability, adapter, config: (config ?? null) as Record<string, unknown> | null })
-    .onConflictDoUpdate({
-      target: integrationConfig.capability,
-      set: { adapter, config: (config ?? null) as Record<string, unknown> | null },
-    })
-    .run();
-  emitDefinitionChanged(deps.db, "", "admin.integration.set", { capability, adapter });
-  return jsonResult({ capability, adapter, config: config ?? null });
+  const result = await deps.integrationRepo.set(capability, adapter, config);
+  emitDefinitionChanged(deps.eventRepo, null, "admin.integration.set", { capability, adapter });
+  return jsonResult(result);
 }

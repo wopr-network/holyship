@@ -6,9 +6,11 @@ import type {
   Flow,
   Invocation,
   IEntityRepository,
+  IEventRepository,
   IFlowRepository,
-  IInvocationRepository,
   IGateRepository,
+  IIntegrationRepository,
+  IInvocationRepository,
   ITransitionLogRepository,
 } from "../../src/repositories/interfaces.js";
 
@@ -160,6 +162,7 @@ function createMockDeps(): McpServerDeps {
       createdAt: null,
     }),
     restore: async () => {},
+    listAll: async () => [mockFlow()],
   };
 
   const invocations: IInvocationRepository = {
@@ -210,12 +213,15 @@ function createMockDeps(): McpServerDeps {
     historyFor: async () => [],
   };
 
-  const db = {
-    insert: () => ({ values: () => ({ run: () => {}, onConflictDoUpdate: () => ({ run: () => {} }) }) }),
-    select: () => ({ from: () => ({ where: () => ({ all: () => [] }) }) }),
-  } as unknown as import("drizzle-orm/better-sqlite3").BetterSQLite3Database;
+  const eventRepo: IEventRepository = {
+    emitDefinitionChanged: async () => {},
+  };
 
-  return { entities, flows, invocations, gates, transitions, db };
+  const integrationRepo: IIntegrationRepository = {
+    set: async (capability, adapter, config) => ({ capability, adapter, config: config ?? null }),
+  };
+
+  return { entities, flows, invocations, gates, transitions, eventRepo, integrationRepo };
 }
 
 // ─── Tests ───
