@@ -107,6 +107,8 @@ function makeMockRepos() {
     findByEntity: vi.fn().mockResolvedValue([]),
     findUnclaimed: vi.fn().mockResolvedValue([]),
     findUnclaimedWithAffinity: vi.fn().mockResolvedValue([]),
+    findUnclaimedByFlow: vi.fn().mockResolvedValue([]),
+    findUnclaimedActive: vi.fn().mockResolvedValue([]),
     findByFlow: vi.fn().mockResolvedValue([]),
     reapExpired: vi.fn().mockResolvedValue([]),
     countActiveByFlow: vi.fn().mockResolvedValue(0),
@@ -425,8 +427,8 @@ describe("Engine", () => {
         failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 1800000,
       };
 
-      // findUnclaimed returns a pending invocation
-      (mocks.invocationRepo.findUnclaimed as ReturnType<typeof vi.fn>).mockResolvedValue([unclaimedInvocation]);
+      // findUnclaimedByFlow returns a pending invocation
+      (mocks.invocationRepo.findUnclaimedByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([unclaimedInvocation]);
       // Entity claim succeeds on first call (for pre-existing invocation path), then null (for direct-claim path)
       (mocks.entityRepo.claim as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(claimedEntity)
@@ -570,7 +572,7 @@ describe("Engine", () => {
         failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 1800000,
       };
       const claimedEntity = makeEntity({ state: "coding", claimedBy: "agent:coder" });
-      (mocks.invocationRepo.findUnclaimed as ReturnType<typeof vi.fn>).mockResolvedValue([pendingInvocation]);
+      (mocks.invocationRepo.findUnclaimedByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([pendingInvocation]);
       (mocks.entityRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue(claimedEntity);
       (mocks.invocationRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue({
         ...pendingInvocation, claimedBy: "agent:coder",
