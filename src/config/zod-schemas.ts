@@ -96,6 +96,7 @@ export const SeedFileSchema = z
     gates: z.array(GateDefinitionSchema).optional().default([]),
     transitions: z.array(TransitionRuleSchema).min(1),
   })
+  .strict()
   .superRefine((seed, ctx) => {
     // Bug 2 fix: detect duplicate flow names explicitly before building the Set
     const flowNames = new Set<string>();
