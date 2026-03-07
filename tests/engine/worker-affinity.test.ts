@@ -257,7 +257,8 @@ describe("worker affinity — claim priority", () => {
     });
 
     const entityRepo = makeEntityRepo({
-      claim: vi.fn().mockResolvedValue(entity),
+      claimById: vi.fn().mockResolvedValue(entity),
+      get: vi.fn().mockResolvedValue(entity),
     });
 
     const flowRepo = makeFlowRepo(flow);
@@ -308,7 +309,7 @@ describe("worker affinity — claim priority", () => {
     });
 
     const entityRepo = makeEntityRepo({
-      claim: vi.fn().mockResolvedValue(entity),
+      claimById: vi.fn().mockResolvedValue(entity),
       get: vi.fn().mockResolvedValue(entity),
     });
 
@@ -332,7 +333,8 @@ describe("worker affinity — claim priority", () => {
     });
 
     const entityRepo = makeEntityRepo({
-      claim: vi.fn().mockResolvedValue(entity),
+      claimById: vi.fn().mockResolvedValue(entity),
+      get: vi.fn().mockResolvedValue(entity),
     });
 
     const flowRepo = makeFlowRepo(flow);

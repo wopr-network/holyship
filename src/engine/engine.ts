@@ -9,6 +9,7 @@ import type {
   IFlowRepository,
   IGateRepository,
   IInvocationRepository,
+  Invocation,
   ITransitionLogRepository,
 } from "../repositories/interfaces.js";
 import { DEFAULT_TIMEOUT_PROMPT } from "./constants.js";
@@ -39,6 +40,8 @@ export interface ProcessSignalResult {
 export interface ClaimWorkResult {
   entityId: string;
   invocationId: string;
+  flowName: string;
+  stage: string;
   prompt: string;
   context: Record<string, unknown> | null;
 }
@@ -386,46 +389,156 @@ export class Engine {
   }
 
   async claimWork(role: string, flowName?: string, worker_id?: string): Promise<ClaimWorkResult | null> {
+    // 1. Find candidate flows filtered by discipline
     let flows: Flow[];
     if (flowName) {
       const flow = await this.flowRepo.getByName(flowName);
-      // Validate discipline match — null discipline flows are claimable by any role
       flows = flow && (flow.discipline === null || flow.discipline === role) ? [flow] : [];
     } else {
       const allFlows = await this.flowRepo.listAll();
       flows = allFlows.filter((f) => f.discipline === null || f.discipline === role);
     }
 
+    if (flows.length === 0) return null;
+
+    // 2. Gather all unclaimed invocations across matching flows
+    type Candidate = { invocation: Invocation; flow: Flow };
+    const candidates: Candidate[] = [];
     for (const flow of flows) {
-      // Try affinity match first if worker_id provided
+      // Affinity candidates first (if worker_id provided)
       if (worker_id) {
         const affinityUnclaimed = await this.invocationRepo.findUnclaimedWithAffinity(flow.id, role, worker_id);
-        for (const pending of affinityUnclaimed) {
-          const claimed = await this.entityRepo.claimById(pending.entityId, `agent:${role}`);
-          if (!claimed) continue;
-          const result = await this.tryClaimInvocation(pending, claimed, flow, role, worker_id);
-          if (result) return result;
+        for (const inv of affinityUnclaimed) candidates.push({ invocation: inv, flow });
+      }
+      const unclaimed = await this.invocationRepo.findUnclaimedByFlow(flow.id);
+      for (const inv of unclaimed) candidates.push({ invocation: inv, flow });
+    }
+
+    // 3. Load entities for priority sorting + dedup candidates
+    const entityMap = new Map<string, Entity>();
+    const uniqueEntityIds = [...new Set(candidates.map((c) => c.invocation.entityId))];
+    await Promise.all(
+      uniqueEntityIds.map(async (eid) => {
+        const entity = await this.entityRepo.get(eid);
+        if (entity) entityMap.set(eid, entity);
+      }),
+    );
+
+    // 4. Build affinity set for priority sorting
+    const affinitySet = new Set<string>();
+    if (worker_id) {
+      for (const c of candidates) {
+        const entity = entityMap.get(c.invocation.entityId);
+        if (!entity) continue;
+        const affinityUnclaimed = await this.invocationRepo.findUnclaimedWithAffinity(c.flow.id, role, worker_id);
+        if (affinityUnclaimed.some((a) => a.id === c.invocation.id)) {
+          affinitySet.add(c.invocation.entityId);
+        }
+      }
+    }
+
+    // 5. Sort: affinity → entity priority → time in state (oldest first)
+    const now = Date.now();
+    candidates.sort((a, b) => {
+      const affinityA = affinitySet.has(a.invocation.entityId) ? 1 : 0;
+      const affinityB = affinitySet.has(b.invocation.entityId) ? 1 : 0;
+      if (affinityA !== affinityB) return affinityB - affinityA;
+
+      const entityA = entityMap.get(a.invocation.entityId);
+      const entityB = entityMap.get(b.invocation.entityId);
+      const priA = entityA?.priority ?? 0;
+      const priB = entityB?.priority ?? 0;
+      if (priA !== priB) return priB - priA;
+
+      const timeA = entityA?.createdAt?.getTime() ?? now;
+      const timeB = entityB?.createdAt?.getTime() ?? now;
+      return timeA - timeB;
+    });
+
+    // 6. Dedup: only try each invocation once (affinity candidates may overlap with unclaimed)
+    const seen = new Set<string>();
+    const deduped = candidates.filter((c) => {
+      if (seen.has(c.invocation.id)) return false;
+      seen.add(c.invocation.id);
+      return true;
+    });
+
+    // 7. Try claiming in priority order (entity-first for safe locking)
+    for (const { invocation: pending, flow } of deduped) {
+      const entity = entityMap.get(pending.entityId);
+      if (!entity) continue;
+      const claimed = await this.entityRepo.claimById(entity.id, worker_id ?? `agent:${role}`);
+      if (!claimed) continue;
+
+      let claimedInvocation: Invocation | null;
+      try {
+        claimedInvocation = await this.invocationRepo.claim(pending.id, `agent:${role}`);
+      } catch (err) {
+        console.error(`invocationRepo.claim() failed for invocation ${pending.id}:`, err);
+        try {
+          await this.entityRepo.release(claimed.id, `agent:${role}`);
+        } catch (releaseErr) {
+          console.error(`release() failed for entity ${claimed.id}:`, releaseErr);
+        }
+        continue;
+      }
+      if (!claimedInvocation) {
+        try {
+          await this.entityRepo.release(claimed.id, `agent:${role}`);
+        } catch (err) {
+          console.error(`release() failed for entity ${claimed.id}:`, err);
+        }
+        continue;
+      }
+
+      if (worker_id) {
+        const windowMs = flow.affinityWindowMs ?? 300000;
+        try {
+          await this.entityRepo.setAffinity(claimed.id, worker_id, role, new Date(Date.now() + windowMs));
+        } catch (err) {
+          console.warn(`setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`, err);
         }
       }
 
-      // Prefer claiming an existing unclaimed invocation created by processSignal
-      // to avoid creating a duplicate. Fall back to creating a new one if none exist.
-      const unclaimed = await this.invocationRepo.findUnclaimedByFlow(flow.id);
-      for (const pending of unclaimed) {
-        const claimed = await this.entityRepo.claim(flow.id, pending.stage, `agent:${role}`);
-        if (!claimed) continue;
-        const result = await this.tryClaimInvocation(pending, claimed, flow, role, worker_id);
-        if (result) return result;
-      }
+      const state = flow.states.find((s) => s.name === pending.stage);
+      const build = state
+        ? await this.buildPromptForEntity(state, claimed, flow)
+        : { prompt: pending.prompt, context: null };
 
-      // No pre-existing unclaimed invocations — claim entity directly and create invocation
+      await this.eventEmitter.emit({
+        type: "entity.claimed",
+        entityId: claimed.id,
+        flowId: flow.id,
+        agentId: `agent:${role}`,
+        emittedAt: new Date(),
+      });
+      return {
+        entityId: claimed.id,
+        invocationId: claimedInvocation.id,
+        flowName: flow.name,
+        stage: pending.stage,
+        prompt: build.prompt,
+        context: build.context,
+      };
+    }
+
+    // 8. Fallback: no unclaimed invocations — claim entity directly and create invocation
+    for (const flow of flows) {
       const claimableStates = flow.states.filter((s) => !!s.promptTemplate);
       for (const state of claimableStates) {
         const claimed = await this.entityRepo.claim(flow.id, state.name, `agent:${role}`);
         if (!claimed) continue;
 
-        await this.setAffinityIfNeeded(claimed.id, flow, role, worker_id);
-        const build = await this.buildPrompt(state, claimed, flow);
+        if (worker_id) {
+          const windowMs = flow.affinityWindowMs ?? 300000;
+          try {
+            await this.entityRepo.setAffinity(claimed.id, worker_id, role, new Date(Date.now() + windowMs));
+          } catch (err) {
+            console.warn(`setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`, err);
+          }
+        }
+
+        const build = await this.buildPromptForEntity(state, claimed, flow);
         const invocation = await this.invocationRepo.create(
           claimed.id,
           state.name,
@@ -436,54 +549,28 @@ export class Engine {
             ? { systemPrompt: build.systemPrompt, userContent: build.userContent }
             : undefined,
         );
-        return this.emitAndReturn(claimed, invocation.id, build, flow, role);
+        await this.eventEmitter.emit({
+          type: "entity.claimed",
+          entityId: claimed.id,
+          flowId: flow.id,
+          agentId: `agent:${role}`,
+          emittedAt: new Date(),
+        });
+        return {
+          entityId: claimed.id,
+          invocationId: invocation.id,
+          flowName: flow.name,
+          stage: state.name,
+          prompt: build.prompt,
+          context: build.context,
+        };
       }
     }
 
     return null;
   }
 
-  /**
-   * Try to claim an existing unclaimed invocation for an already-claimed entity.
-   * Handles the race condition where another worker claims the invocation first
-   * (releases the entity claim and returns null so the caller can try the next candidate).
-   */
-  private async tryClaimInvocation(
-    pending: { id: string; entityId: string; stage: string; prompt: string },
-    claimed: Entity,
-    flow: Flow,
-    role: string,
-    worker_id?: string,
-  ): Promise<ClaimWorkResult | null> {
-    const claimedInvocation = await this.invocationRepo.claim(pending.id, `agent:${role}`);
-    if (!claimedInvocation) {
-      try {
-        await this.entityRepo.release(claimed.id, `agent:${role}`);
-      } catch (err) {
-        this.logger.error(`release() failed for entity ${claimed.id}:`, err);
-      }
-      return null;
-    }
-
-    await this.setAffinityIfNeeded(claimed.id, flow, role, worker_id);
-
-    const state = flow.states.find((s) => s.name === pending.stage);
-    const build = state ? await this.buildPrompt(state, claimed, flow) : { prompt: pending.prompt, context: null };
-
-    return this.emitAndReturn(claimed, claimedInvocation.id, build, flow, role);
-  }
-
-  private async setAffinityIfNeeded(entityId: string, flow: Flow, role: string, worker_id?: string): Promise<void> {
-    if (!worker_id) return;
-    const affinityWindow = flow.affinityWindowMs ?? 300000;
-    try {
-      await this.entityRepo.setAffinity(entityId, worker_id, role, new Date(Date.now() + affinityWindow));
-    } catch (err) {
-      this.logger.warn(`setAffinity failed for entity ${entityId} worker ${worker_id} — continuing:`, err);
-    }
-  }
-
-  private async buildPrompt(
+  private async buildPromptForEntity(
     state: Flow["states"][number],
     entity: Entity,
     flow: Flow,
@@ -494,28 +581,6 @@ export class Engine {
     ]);
     const enriched: EnrichedEntity = { ...entity, invocations, gateResults };
     return buildInvocation(state, enriched, this.adapters, flow, this.logger);
-  }
-
-  private async emitAndReturn(
-    entity: Entity,
-    invocationId: string,
-    build: { prompt: string; context: Record<string, unknown> | null },
-    flow: Flow,
-    role: string,
-  ): Promise<ClaimWorkResult> {
-    await this.eventEmitter.emit({
-      type: "entity.claimed",
-      entityId: entity.id,
-      flowId: flow.id,
-      agentId: `agent:${role}`,
-      emittedAt: new Date(),
-    });
-    return {
-      entityId: entity.id,
-      invocationId,
-      prompt: build.prompt,
-      context: build.context,
-    };
   }
 
   async getStatus(): Promise<EngineStatus> {

@@ -430,12 +430,14 @@ describe("Engine", () => {
 
       // findUnclaimedByFlow returns a pending invocation
       (mocks.invocationRepo.findUnclaimedByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([unclaimedInvocation]);
-      // Entity claim succeeds on first call (for pre-existing invocation path), then null (for direct-claim path)
-      (mocks.entityRepo.claim as ReturnType<typeof vi.fn>)
+      // claimById succeeds (entity claim for invocation path)
+      (mocks.entityRepo.claimById as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(claimedEntity)
         .mockResolvedValue(null);
       // Invocation claim fails (another agent got it)
       (mocks.invocationRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      // Direct entity claim fallback also fails
+      (mocks.entityRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
       const engine = new Engine({ ...mocks, adapters: new Map() });
       const result = await engine.claimWork("coder", "test-flow");
@@ -574,7 +576,7 @@ describe("Engine", () => {
       };
       const claimedEntity = makeEntity({ state: "coding", claimedBy: "agent:coder" });
       (mocks.invocationRepo.findUnclaimedByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([pendingInvocation]);
-      (mocks.entityRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue(claimedEntity);
+      (mocks.entityRepo.claimById as ReturnType<typeof vi.fn>).mockResolvedValue(claimedEntity);
       (mocks.invocationRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue({
         ...pendingInvocation, claimedBy: "agent:coder",
       });

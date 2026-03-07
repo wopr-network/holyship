@@ -186,10 +186,13 @@ function createMockDeps(): McpServerDeps {
       mockInvocation({ claimedBy: "coder", claimedAt: new Date() }),
     ],
     findUnclaimed: async () => [mockInvocation()],
+    findUnclaimedWithAffinity: async () => [],
     findUnclaimedByFlow: async () => [mockInvocation()],
     findByFlow: async () => [],
     findUnclaimedActive: async () => [],
     reapExpired: async () => [],
+    countActiveByFlow: async () => 0,
+    countPendingByFlow: async () => 0,
   };
 
   const gates: IGateRepository = {
@@ -350,6 +353,7 @@ describe("MCP tool handlers", () => {
     deps.invocations.findUnclaimedByFlow = async () => [];
     deps.entities.findByFlowAndState = async () => [];
     deps.entities.hasAnyInFlowAndState = async () => false;
+    deps.entities.claim = async () => null; // no fallback entity either
     const result = await callTool("flow.claim", { worker_id: "wkr_test", role: "coder", flow: "test-flow" });
     const content = result.content as Array<{ type: string; text: string }>;
     const data = JSON.parse(content[0].text);
@@ -358,13 +362,15 @@ describe("MCP tool handlers", () => {
     expect(data.message).toContain("No work available");
   });
 
-  it("flow.claim returns error for unknown flow", async () => {
+  it("flow.claim returns check_back for unknown flow", async () => {
     const result = await callTool("flow.claim", {
       worker_id: "wkr_test",
       role: "coder",
       flow: "nonexistent",
     });
-    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    const data = JSON.parse(content[0].text);
+    expect(data.next_action).toBe("check_back");
   });
 
   it("flow.get_prompt returns prompt and context", async () => {
@@ -1057,19 +1063,14 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
       return null;
     };
 
-    deps.invocations.findByEntity = async (entityId) => {
-      if (entityId === "ent-affinity") {
-        return [mockInvocation({
-          entityId: "ent-affinity",
-          claimedBy: "wkr_test",
-          completedAt: new Date(Date.now() - 60 * 1000), // 1 minute ago — within default 5-min affinity window
-        })];
-      }
+    // Engine uses findUnclaimedWithAffinity for affinity detection
+    deps.invocations.findUnclaimedWithAffinity = async (flowId, _role, _workerId) => {
+      if (flowId === "flow-1") return [mockInvocation({ id: "inv-affinity", entityId: "ent-affinity" })];
       return [];
     };
 
     deps.invocations.claim = async (id) =>
-      mockInvocation({ id, entityId: "ent-affinity", claimedBy: "wkr_test", claimedAt: new Date() });
+      mockInvocation({ id, entityId: id === "inv-affinity" ? "ent-affinity" : "ent-high", claimedBy: "wkr_test", claimedAt: new Date() });
 
     const result = await callClaim({ worker_id: "wkr_test", role: "engineering" });
     const data = parseResult(result as { content: Array<{ text: string }> });
@@ -1108,6 +1109,7 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
     deps.invocations.findUnclaimedByFlow = async () => [];
     deps.entities.findByFlowAndState = async () => [];
     deps.entities.hasAnyInFlowAndState = async () => false;
+    deps.entities.claim = async () => null;
 
     const result = await callClaim({ worker_id: "wkr_test", role: "engineering" });
     const data = parseResult(result as { content: Array<{ text: string }> });
@@ -1126,64 +1128,44 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
     expect((result as { isError?: boolean }).isError).toBeUndefined();
   });
 
-  it("returns check_back with 30s retry when entities exist but are all claimed", async () => {
+  it("returns check_back when entities exist but are all claimed", async () => {
     // Use role "coder" to match the default mockFlow state agentRole
     const flow1 = mockFlow({ id: "flow-1", name: "coder-flow", discipline: null });
     deps.flows.list = async () => [flow1];
     deps.flows.listAll = async () => [flow1];
     deps.invocations.findUnclaimedByFlow = async () => [];
-    // Entities exist in the "draft" state whose agentRole is "coder"
-    deps.entities.findByFlowAndState = async (_flowId, stateName) => {
-      if (stateName === "draft") return [mockEntity({ id: "ent-claimed", claimedBy: "wkr_other" })];
-      return [];
-    };
-    deps.entities.hasAnyInFlowAndState = async () => true;
+    deps.entities.claim = async () => null; // all entities already claimed
+    deps.entities.claimById = async () => null;
 
     const result = await callClaim({ worker_id: "wkr_test", role: "coder" });
     const data = parseResult(result as { content: Array<{ text: string }> });
     expect(data.next_action).toBe("check_back");
-    expect(data.retry_after_ms).toBe(30000);
   });
 
-  it("returns check_back with 300s retry when all entities are in terminal states (agentRole=null)", async () => {
-    // Flow has a "done" state with agentRole=null. All entities are in that terminal state.
-    // hasAnyInFlowAndState should only be called with claimable state names, not "done".
-    // If terminal states were included, hasAnyInFlowAndState would return true → wrongly 30s retry.
+  it("returns check_back when all entities are in terminal states", async () => {
     const flow1 = mockFlow({ id: "flow-1", name: "test-flow", discipline: null });
     deps.flows.list = async () => [flow1];
     deps.flows.listAll = async () => [flow1];
     deps.invocations.findUnclaimedByFlow = async () => [];
-    deps.entities.findByFlowAndState = async () => [];
-    // hasAnyInFlowAndState returns true only if "done" (terminal) is passed — should NOT be called with it
-    deps.entities.hasAnyInFlowAndState = async (_flowId, stateNames) => {
-      if (stateNames.includes("done")) return true; // would trigger wrong 30s if terminal states leak through
-      return false;
-    };
+    deps.entities.claim = async () => null; // no claimable entities
+    deps.entities.claimById = async () => null;
 
     const result = await callClaim({ worker_id: "wkr_test", role: "coder" });
     const data = parseResult(result as { content: Array<{ text: string }> });
     expect(data.next_action).toBe("check_back");
-    expect(data.retry_after_ms).toBe(300000); // 300s = empty backlog, not 30s
   });
 
-  it("returns check_back with 30s retry when discipline-filtered flow has entities but discipline !== agentRole", async () => {
-    // discipline "engineering" matches the flow; state.agentRole is "coder" (different from discipline)
-    // The old code filtered states by agentRole === role, wrongly excluding all states → 300s
-    // The correct code checks all states in candidateFlows → finds entities → 30s
+  it("returns check_back when discipline-filtered flow has no claimable entities", async () => {
     const flow1 = mockFlow({ id: "flow-1", name: "eng-flow", discipline: "engineering" });
     deps.flows.list = async () => [flow1];
     deps.flows.listAll = async () => [flow1];
     deps.invocations.findUnclaimedByFlow = async () => [];
-    deps.entities.findByFlowAndState = async (_flowId, stateName) => {
-      if (stateName === "draft") return [mockEntity({ id: "ent-eng", claimedBy: "wkr_other" })];
-      return [];
-    };
-    deps.entities.hasAnyInFlowAndState = async () => true;
+    deps.entities.claim = async () => null; // all claimed by others
+    deps.entities.claimById = async () => null;
 
     const result = await callClaim({ worker_id: "wkr_eng", role: "engineering" });
     const data = parseResult(result as { content: Array<{ text: string }> });
     expect(data.next_action).toBe("check_back");
-    expect(data.retry_after_ms).toBe(30000);
   });
 });
 
@@ -1732,21 +1714,28 @@ describe("admin tool handlers — direct callToolHandler", () => {
   it("flow.claim continues to next candidate when claim throws", async () => {
     let callCount = 0;
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const testDeps: McpServerDeps = {
-      ...deps,
-      invocations: {
-        ...deps.invocations,
-        findUnclaimedByFlow: async () => [
-          mockInvocation({ id: "inv-1" }),
-          mockInvocation({ id: "inv-2" }),
-        ],
-        claim: async (id: string) => {
-          callCount++;
-          if (callCount === 1) throw new Error("DB error");
-          return mockInvocation({ id, claimedBy: "coder", claimedAt: new Date() });
-        },
-      } as any,
-    };
+    const testInvocations = {
+      ...deps.invocations,
+      findUnclaimedByFlow: async () => [
+        mockInvocation({ id: "inv-1" }),
+        mockInvocation({ id: "inv-2" }),
+      ],
+      claim: async (id: string) => {
+        callCount++;
+        if (callCount === 1) throw new Error("DB error");
+        return mockInvocation({ id, claimedBy: "coder", claimedAt: new Date() });
+      },
+    } as any;
+    const testEngine = new Engine({
+      entityRepo: deps.entities,
+      flowRepo: deps.flows,
+      invocationRepo: testInvocations,
+      gateRepo: deps.gates,
+      transitionLogRepo: deps.transitions,
+      adapters: new Map(),
+      eventEmitter: { emit: async () => {} },
+    });
+    const testDeps: McpServerDeps = { ...deps, invocations: testInvocations, engine: testEngine };
     const { callToolHandler } = await import("../../src/execution/mcp-server.js");
     const result = await callToolHandler(testDeps, "flow.claim", { role: "coder" });
     expect(result.isError).toBeUndefined();
@@ -1755,33 +1744,32 @@ describe("admin tool handlers — direct callToolHandler", () => {
     errorSpy.mockRestore();
   });
 
-  it("flow.claim releases invocation when claimById returns null (race)", async () => {
-    const releaseClaimMock = vi.fn().mockResolvedValue(undefined);
-    const testDeps: McpServerDeps = {
-      ...deps,
-      flows: {
-        ...deps.flows,
-        list: async () => [mockFlow({ discipline: "coder" })],
-        listAll: async () => [mockFlow({ discipline: "coder" })],
-        getByName: async (name: string) => (name === "test-flow" ? mockFlow({ discipline: "coder" }) : null),
-      } as any,
-      entities: {
-        ...deps.entities,
-        claimById: async () => null,
-        get: async () => mockEntity(),
-        hasAnyInFlowAndState: async () => true,
-      } as any,
-      invocations: {
-        ...deps.invocations,
-        findUnclaimedByFlow: async () => [mockInvocation({ id: "inv-1" })],
-        claim: async (id: string) => mockInvocation({ id, claimedBy: "coder", claimedAt: new Date() }),
-        releaseClaim: releaseClaimMock,
-        findByEntity: async () => [],
-      } as any,
-    };
+  it("flow.claim releases entity when invocationRepo.claim returns null (race)", async () => {
+    const releaseEntityMock = vi.fn().mockResolvedValue(undefined);
+    const testEntities = {
+      ...deps.entities,
+      claimById: async (id: string) => mockEntity({ id, claimedBy: "agent:coder" }),
+      get: async () => mockEntity(),
+      release: releaseEntityMock,
+    } as any;
+    const testInvocations = {
+      ...deps.invocations,
+      findUnclaimedByFlow: async () => [mockInvocation({ id: "inv-1" })],
+      claim: async () => null,
+    } as any;
+    const testEngine = new Engine({
+      entityRepo: testEntities,
+      flowRepo: deps.flows,
+      invocationRepo: testInvocations,
+      gateRepo: deps.gates,
+      transitionLogRepo: deps.transitions,
+      adapters: new Map(),
+      eventEmitter: { emit: async () => {} },
+    });
+    const testDeps: McpServerDeps = { ...deps, entities: testEntities, invocations: testInvocations, engine: testEngine };
     const { callToolHandler } = await import("../../src/execution/mcp-server.js");
     await callToolHandler(testDeps, "flow.claim", { role: "coder" });
-    expect(releaseClaimMock).toHaveBeenCalledWith("inv-1");
+    expect(releaseEntityMock).toHaveBeenCalled();
   });
 
   it("flow.report sets affinity on passive completion with worker_id", async () => {
