@@ -45,6 +45,7 @@ export async function exportSeed(flowRepo: IFlowRepository, gateRepo: IGateRepos
     createdBy: f.createdBy ?? undefined,
     discipline: f.discipline as string,
     defaultModelTier: f.defaultModelTier ?? undefined,
+    timeoutPrompt: f.timeoutPrompt ?? undefined,
   }));
 
   const seedStates: SeedFile["states"] = exportedFlows.flatMap((f) =>
