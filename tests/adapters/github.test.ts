@@ -214,6 +214,13 @@ describe("path validation", () => {
       expect(mockExec).not.toHaveBeenCalled();
     });
 
+    it("rejects absolute localRepoPath outside REPOS_BASE", async () => {
+      await expect(
+        adapter.createWorktree("/etc/shadow", "feat", "./worktrees/feat"),
+      ).rejects.toThrow(PathTraversalError);
+      expect(mockExec).not.toHaveBeenCalled();
+    });
+
     it("accepts valid paths within allowed bases", async () => {
       mockExec.mockResolvedValueOnce({ stdout: "", stderr: "" });
       const worktreePath = process.env.WORKTREE_BASE

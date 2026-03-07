@@ -1,5 +1,6 @@
 import { execFile as execFileCb } from "node:child_process";
-import { resolve, sep } from "node:path";
+import { realpathSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { ICodeHostAdapter } from "./interfaces.js";
 
@@ -14,12 +15,46 @@ export class PathTraversalError extends Error {
   }
 }
 
-const WORKTREE_BASE = resolve(process.env.WORKTREE_BASE ?? "./worktrees");
-const REPOS_BASE = resolve(process.env.REPOS_BASE ?? "./repos");
+function getWorktreeBase(): string {
+  return resolve(process.env.WORKTREE_BASE || `${process.cwd()}/worktrees`);
+}
 
-function validatePath(value: string, base: string, label: string): string {
+function getReposBase(): string {
+  return resolve(process.env.REPOS_BASE || `${process.cwd()}/repos`);
+}
+
+function isOutside(resolved: string, base: string): boolean {
+  const rel = relative(base, resolved);
+  return rel.startsWith("..") || isAbsolute(rel);
+}
+
+function validatePath(value: string, base: string, label: string, mustExist = false): string {
   const resolved = resolve(value);
-  if (!resolved.startsWith(base + sep) && resolved !== base) {
+  let realBase: string;
+  try {
+    realBase = realpathSync(base);
+  } catch {
+    realBase = base;
+  }
+
+  if (mustExist) {
+    let real: string;
+    try {
+      real = realpathSync(resolved);
+    } catch {
+      // Path doesn't exist yet (e.g. worktree being created) — fall back to non-realpath check
+      if (isOutside(resolved, realBase)) {
+        throw new PathTraversalError(label, value);
+      }
+      return resolved;
+    }
+    if (isOutside(real, realBase)) {
+      throw new PathTraversalError(label, value);
+    }
+    return real;
+  }
+
+  if (isOutside(resolved, realBase)) {
     throw new PathTraversalError(label, value);
   }
   return resolved;
@@ -141,15 +176,15 @@ export class GitHubCodeHostAdapter implements ICodeHostAdapter {
   }
 
   async createWorktree(localRepoPath: string, branch: string, path: string): Promise<string> {
-    const validatedPath = validatePath(path, WORKTREE_BASE, "Worktree");
-    const validatedRepo = validatePath(localRepoPath, REPOS_BASE, "Repository");
+    const validatedPath = validatePath(path, getWorktreeBase(), "Worktree", false);
+    const validatedRepo = validatePath(localRepoPath, getReposBase(), "Repository", false);
     await this.git(["-C", validatedRepo, "worktree", "add", "-b", branch, validatedPath]);
     return validatedPath;
   }
 
   async removeWorktree(path: string, localRepoPath: string): Promise<void> {
-    const validatedPath = validatePath(path, WORKTREE_BASE, "Worktree");
-    const validatedRepo = validatePath(localRepoPath, REPOS_BASE, "Repository");
+    const validatedPath = validatePath(path, getWorktreeBase(), "Worktree", true);
+    const validatedRepo = validatePath(localRepoPath, getReposBase(), "Repository", true);
     await this.git(["-C", validatedRepo, "worktree", "remove", "--force", validatedPath]);
     await this.git(["-C", validatedRepo, "worktree", "prune"]);
   }
