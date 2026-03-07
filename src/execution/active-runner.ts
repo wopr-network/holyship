@@ -108,19 +108,31 @@ export class ActiveRunner {
       return;
     }
 
+    const MAX_PROCESS_SIGNAL_RETRIES = 3;
+
     let result: ProcessSignalResult;
     try {
       result = await this.engine.processSignal(invocation.entityId, parsed.signal, parsed.artifacts, invocation.id);
     } catch (err) {
       console.error(`[active-runner] processSignal failed for entity ${invocation.entityId}:`, err);
-      // processSignal failed after we already completed the invocation — create a
-      // replacement so the entity can be reclaimed rather than being permanently orphaned.
+      // processSignal failed after we already completed the invocation. Track retry count
+      // via context to prevent infinite re-queue loops on persistent errors.
+      const retryCount = (invocation.context?.retryCount as number | undefined) ?? 0;
+      if (retryCount >= MAX_PROCESS_SIGNAL_RETRIES) {
+        console.error(
+          `[active-runner] entity ${invocation.entityId} exceeded max processSignal retries (${MAX_PROCESS_SIGNAL_RETRIES}), marking as stuck`,
+        );
+        await this.entityRepo.updateArtifacts(invocation.entityId, { stuck: true, stuckAt: new Date().toISOString() });
+        return;
+      }
       await this.invocationRepo.create(
         invocation.entityId,
         invocation.stage,
         invocation.prompt,
         invocation.mode,
         invocation.agentRole ?? undefined,
+        undefined,
+        { ...(invocation.context ?? {}), retryCount: retryCount + 1 },
       );
       return;
     }
@@ -139,6 +151,8 @@ export class ActiveRunner {
         invocation.prompt,
         invocation.mode,
         invocation.agentRole ?? undefined,
+        undefined,
+        invocation.context ?? undefined,
       );
       await sleep(retryAfterMs, signal);
       return;
@@ -177,14 +191,14 @@ export class ActiveRunner {
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
