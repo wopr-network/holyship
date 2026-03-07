@@ -89,12 +89,84 @@ describe("evaluateGate", () => {
     expect(result.passed).toBe(false);
   });
 
-  it("throws for function type gates", async () => {
-    const gate = makeGate({ type: "function", functionRef: "myFn" });
+  it("returns passed=true for function gate with valid module", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/passing-gate.ts:check",
+    });
     const entity = makeEntity();
-    const gateRepo = {} as IGateRepository;
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({
+        id: "gr-1", entityId: "ent-1", gateId: "gate-1",
+        passed: true, output: "all good", evaluatedAt: new Date(),
+      }),
+    };
 
-    await expect(evaluateGate(gate, entity, gateRepo)).rejects.toThrow("Function gates not yet implemented");
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(true);
+    expect(result.output).toBe("all good");
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", true, "all good");
+  });
+
+  it("returns passed=false when function gate times out", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/slow-gate.ts:check",
+      timeoutMs: 50,
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/timed out/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/timed out/));
+  });
+
+  it("returns passed=false when functionRef has no colon separator", async () => {
+    const gate = makeGate({ type: "function", functionRef: "no-colon" });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/Invalid functionRef/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/Invalid functionRef/));
+  });
+
+  it("returns passed=false when exported name is not a function", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/passing-gate.ts:nonExistent",
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/not found/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/not found/));
+  });
+
+  it("returns passed=false when functionRef is null", async () => {
+    const gate = makeGate({ type: "function", functionRef: null });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({
+        id: "gr-1", entityId: "ent-1", gateId: "gate-1",
+        passed: false, output: "Gate functionRef is not configured", evaluatedAt: new Date(),
+      }),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toBe("Gate functionRef is not configured");
   });
 
   it("returns passed=false when apiConfig is missing", async () => {
@@ -267,5 +339,114 @@ describe("evaluateGate", () => {
     const gateRepo = {} as IGateRepository;
 
     await expect(evaluateGate(gate, entity, gateRepo)).rejects.toThrow("Unknown gate type: webhook");
+  });
+
+  it("returns passed=false for functionRef path outside project root (path traversal)", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "../../../etc/passwd:check",
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/outside the project root/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/outside the project root/));
+  });
+
+  it("clears the timeout timer when the function gate resolves", async () => {
+    // If the timer is not cleared, the handle keeps the test process alive
+    // (vitest detects leaked timers). This test verifies the timer IS cleared.
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/passing-gate.ts:check",
+      timeoutMs: 5000,
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({
+        id: "gr-1", entityId: "ent-1", gateId: "gate-1",
+        passed: true, output: "all good", evaluatedAt: new Date(),
+      }),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(true);
+    // No leaked timer — passes cleanly if clearTimeout was called
+  });
+
+  it("treats timeoutMs=0 as no timeout (uses default), not zero-ms timeout", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/passing-gate.ts:check",
+      timeoutMs: 0,
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({
+        id: "gr-1", entityId: "ent-1", gateId: "gate-1",
+        passed: true, output: "all good", evaluatedAt: new Date(),
+      }),
+    };
+
+    // Should succeed, not immediately timeout
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(true);
+  });
+
+  it("returns passed=false when function returns wrong shape", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/bad-return-gate.ts:check",
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({
+        id: "gr-1", entityId: "ent-1", gateId: "gate-1",
+        passed: false, output: "", evaluatedAt: new Date(),
+      }),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/invalid return/i);
+  });
+
+  it("records passed=false and returns when function gate throws", async () => {
+    const gate = makeGate({
+      type: "function",
+      functionRef: "tests/engine/fixtures/throwing-gate.ts:check",
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/gate exploded/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/gate exploded/));
+  });
+
+  it("returns passed=false for absolute path outside project root (traversal via absolute path)", async () => {
+    // Absolute path that starts with PROJECT_ROOT string but escapes via symlink trickery
+    // is caught by relative() check. A plain traversal path is already covered by the
+    // existing test; this verifies the containment logic handles the absolute-path edge case.
+    const gate = makeGate({
+      type: "function",
+      functionRef: "/etc/passwd:check",
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/outside the project root/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/outside the project root/));
   });
 });

@@ -126,7 +126,7 @@ describe("GateDefinitionSchema", () => {
     const result = GateDefinitionSchema.safeParse({
       name: "custom-check",
       type: "function",
-      functionRef: "validators.checkCoverage",
+      functionRef: "validators:checkCoverage",
     });
     expect(result.success).toBe(true);
   });
