@@ -117,7 +117,7 @@ describe("CLI", () => {
     const dbPath = join(tmpdir(), `cli-cors-${Date.now()}.db`);
     const seedPath = writeSeedFile(validSeed);
     try {
-      run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+      run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
 
       // Use port 0 to let the OS pick an ephemeral port
       const child = execFile("npx", ["tsx", CLI, "serve", "--transport", "sse", "--port", "0", "--db", dbPath], {
