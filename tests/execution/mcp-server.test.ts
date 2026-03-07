@@ -1041,8 +1041,8 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
     deps.invocations.findUnclaimedByFlow = async () => [recentInv, oldInv];
 
     deps.entities.get = async (id) => {
-      if (id === "ent-recent") return mockEntity({ id: "ent-recent", flowId: "flow-1", priority: 3, updatedAt: new Date(Date.now() - 5 * 60 * 1000) });
-      if (id === "ent-old") return mockEntity({ id: "ent-old", flowId: "flow-1", priority: 3, updatedAt: new Date(Date.now() - 60 * 60 * 1000) });
+      if (id === "ent-recent") return mockEntity({ id: "ent-recent", flowId: "flow-1", priority: 3, createdAt: new Date(Date.now() - 5 * 60 * 1000), updatedAt: new Date(Date.now() - 5 * 60 * 1000) });
+      if (id === "ent-old") return mockEntity({ id: "ent-old", flowId: "flow-1", priority: 3, createdAt: new Date(Date.now() - 60 * 60 * 1000), updatedAt: new Date(Date.now() - 60 * 60 * 1000) });
       return null;
     };
 
