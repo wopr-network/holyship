@@ -138,4 +138,32 @@ describe("checkSsrf", () => {
     expect(result.allowed).toBe(false);
     expect(mockResolve4).not.toHaveBeenCalled();
   });
+
+  it("blocks fc00::/7 IPv6 ULA (fc prefix)", async () => {
+    mockResolve4.mockRejectedValue(new Error("no A"));
+    mockResolve6.mockResolvedValue(["fc00::1"]);
+    const result = await checkSsrf("https://ula.test/api");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("SSRF_BLOCKED");
+  });
+
+  it("blocks fc00::/7 IPv6 ULA (fd prefix)", async () => {
+    mockResolve4.mockRejectedValue(new Error("no A"));
+    mockResolve6.mockResolvedValue(["fd12:3456:789a::1"]);
+    const result = await checkSsrf("https://ula2.test/api");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("SSRF_BLOCKED");
+  });
+
+  it("returns resolvedIps in result for public hostname", async () => {
+    const result = await checkSsrf("https://example.com/api");
+    expect(result.allowed).toBe(true);
+    expect(result.resolvedIps).toEqual(["93.184.216.34"]);
+  });
+
+  it("ipInCidr: rejects prefix > 32 (treats as non-matching, private IP still blocked)", async () => {
+    mockResolve4.mockResolvedValue(["10.0.0.1"]);
+    const result = await checkSsrf("https://internal.corp/api", "10.0.0.0/33");
+    expect(result.allowed).toBe(false);
+  });
 });

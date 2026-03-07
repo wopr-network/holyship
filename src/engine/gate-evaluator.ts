@@ -109,20 +109,48 @@ export async function evaluateGate(
         await gateRepo.record(entity.id, gate.id, passed, output);
         return { passed, timedOut: false, output };
       }
-      // SSRF guard: resolve hostname and check against blocklist
-      const ssrfResult = await checkSsrf(url, process.env.DEFCON_GATE_ALLOWLIST);
+      // SSRF guard: resolve hostname and check against blocklist.
+      // Wrap in try/catch so malformed URLs don't abort the gate without recording a result.
+      let ssrfResult: Awaited<ReturnType<typeof checkSsrf>>;
+      try {
+        ssrfResult = await checkSsrf(url, process.env.DEFCON_GATE_ALLOWLIST);
+      } catch (err) {
+        passed = false;
+        output = `SSRF_BLOCKED: ${err instanceof Error ? err.message : String(err)}`;
+        await gateRepo.record(entity.id, gate.id, passed, output);
+        return { passed, timedOut: false, output };
+      }
       if (!ssrfResult.allowed) {
         passed = false;
         output = ssrfResult.reason ?? "SSRF_BLOCKED";
         await gateRepo.record(entity.id, gate.id, passed, output);
         return { passed, timedOut: false, output };
       }
+      // Use pre-resolved IP for fetch to avoid DNS rebinding TOCTOU.
+      // Replace hostname with the first resolved IP and set Host header to original hostname.
+      const parsedUrl = new URL(url);
+      const originalHostname = parsedUrl.hostname;
+      const resolvedIp = ssrfResult.resolvedIps?.[0];
+      const fetchUrl =
+        resolvedIp && resolvedIp !== originalHostname
+          ? (() => {
+              parsedUrl.hostname = resolvedIp;
+              return parsedUrl.toString();
+            })()
+          : url;
+      const fetchHeaders: Record<string, string> =
+        resolvedIp && resolvedIp !== originalHostname ? { Host: originalHostname } : {};
       const method = (gate.apiConfig.method as string) ?? "GET";
       const expectStatus = (gate.apiConfig.expectStatus as number) ?? 200;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), effectiveTimeout);
       try {
-        const res = await fetch(url, { method, signal: controller.signal, redirect: "manual" });
+        const res = await fetch(fetchUrl, {
+          method,
+          signal: controller.signal,
+          redirect: "manual",
+          headers: fetchHeaders,
+        });
         passed = res.status === expectStatus;
         output = `HTTP ${res.status}`;
       } catch (err) {

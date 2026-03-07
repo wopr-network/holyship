@@ -82,4 +82,24 @@ describe("evaluateGate SSRF integration", () => {
     expect(result.passed).toBe(true);
     fetchSpy.mockRestore();
   });
+
+  it("records BLOCKED result when checkSsrf throws (malformed URL)", async () => {
+    mockCheckSsrf.mockRejectedValue(new Error("Invalid URL"));
+
+    const gate: Gate = {
+      id: "g2",
+      name: "bad-url-gate",
+      type: "api",
+      command: null,
+      functionRef: null,
+      timeoutMs: 5000,
+      apiConfig: { url: "https://example.com/ok", method: "GET", expectStatus: 200 },
+    };
+
+    const gateRepo = makeGateRepo();
+    const result = await evaluateGate(gate, makeEntity(), gateRepo);
+    expect(result.passed).toBe(false);
+    expect(result.output).toContain("SSRF_BLOCKED");
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "g2", false, expect.stringContaining("SSRF_BLOCKED"));
+  });
 });

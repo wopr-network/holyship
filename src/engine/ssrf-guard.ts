@@ -14,11 +14,13 @@ export const _dnsCache: Map<string, DnsCacheEntry> = new Map();
 export interface SsrfCheckResult {
   allowed: boolean;
   reason?: string;
+  /** Resolved IPs to use for the actual fetch (avoids DNS rebinding TOCTOU) */
+  resolvedIps?: string[];
 }
 
 /**
  * Returns true if the IP address is in a private/reserved range.
- * Handles IPv4, IPv6 loopback, link-local, and IPv6-mapped IPv4.
+ * Handles IPv4, IPv6 loopback, link-local, ULA, and IPv6-mapped IPv4.
  */
 function isPrivateIp(ip: string): boolean {
   let normalized = ip;
@@ -34,6 +36,9 @@ function isPrivateIp(ip: string): boolean {
 
   // IPv6 link-local fe80::/10
   if (/^fe[89ab][0-9a-f]:/i.test(normalized)) return true;
+
+  // IPv6 ULA fc00::/7 (addresses starting with fc or fd)
+  if (/^f[cd]/i.test(normalized)) return true;
 
   // IPv4 checks
   const parts = normalized.split(".").map(Number);
@@ -67,6 +72,9 @@ function ipInCidr(ip: string, cidr: string): boolean {
   const baseParts = base.split(".").map(Number);
   const ipParts = ip.split(".").map(Number);
   if (baseParts.length !== 4 || ipParts.length !== 4) return false;
+
+  // Validate prefix bounds for IPv4
+  if (prefix < 0 || prefix > 32) return false;
 
   const baseNum = (baseParts[0] << 24) | (baseParts[1] << 16) | (baseParts[2] << 8) | baseParts[3];
   const ipNum = (ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3];
@@ -125,22 +133,19 @@ function parseAllowlist(allowlist: string): { hostnames: Set<string>; cidrs: str
  *
  * @param url - The full HTTPS URL to check
  * @param allowlistEnv - Optional comma-separated allowlist (pass process.env.DEFCON_GATE_ALLOWLIST)
- * @returns SsrfCheckResult indicating whether the request should proceed
+ * @returns SsrfCheckResult indicating whether the request should proceed,
+ *          including resolvedIps to use for the actual fetch to avoid DNS rebinding TOCTOU.
  */
 export async function checkSsrf(url: string, allowlistEnv?: string): Promise<SsrfCheckResult> {
   const parsed = new URL(url);
   const hostname = parsed.hostname;
 
-  // If allowlist is set and hostname is explicitly allowed, skip checks
-  if (allowlistEnv) {
-    const { hostnames, cidrs } = parseAllowlist(allowlistEnv);
-    if (hostnames.has(hostname)) {
-      return { allowed: true };
-    }
+  // Parse allowlist once and reuse both hostnames and cidrs
+  const allowlist = allowlistEnv ? parseAllowlist(allowlistEnv) : null;
 
-    // For CIDR allowlist, we need to resolve first then check
-    // (handled below after resolution)
-    void cidrs; // used below
+  // If allowlist is set and hostname is explicitly allowed, skip checks
+  if (allowlist?.hostnames.has(hostname)) {
+    return { allowed: true };
   }
 
   // If the hostname is an IP literal, check directly without DNS
@@ -155,13 +160,10 @@ export async function checkSsrf(url: string, allowlistEnv?: string): Promise<Ssr
   }
 
   // Check CIDR allowlist if present
-  if (allowlistEnv) {
-    const { cidrs } = parseAllowlist(allowlistEnv);
-    if (cidrs.length > 0) {
-      const allIpsAllowed = ips.every((ip) => cidrs.some((cidr) => ipInCidr(ip, cidr)));
-      if (allIpsAllowed) {
-        return { allowed: true };
-      }
+  if (allowlist && allowlist.cidrs.length > 0) {
+    const allIpsAllowed = ips.every((ip) => allowlist.cidrs.some((cidr) => ipInCidr(ip, cidr)));
+    if (allIpsAllowed) {
+      return { allowed: true, resolvedIps: ips };
     }
   }
 
@@ -172,5 +174,5 @@ export async function checkSsrf(url: string, allowlistEnv?: string): Promise<Ssr
     }
   }
 
-  return { allowed: true };
+  return { allowed: true, resolvedIps: ips };
 }
