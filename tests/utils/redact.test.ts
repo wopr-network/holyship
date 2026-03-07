@@ -91,6 +91,29 @@ describe("redact", () => {
 		expect(typeof result.stack).toBe("string");
 	});
 
+	it("does NOT redact keys where sensitive term is part of a larger word (false-positive guard)", () => {
+		const input = {
+			authorId: "user-123",
+			authorEmail: "alice@example.com",
+			monkey: "data",
+			turkey: "data",
+			authToken: "secret-val",
+			token: "secret-val",
+			password: "hunter2",
+		};
+		const result = redact(input) as Record<string, unknown>;
+		// These must NOT be redacted — "author" contains "auth" but is a different word
+		expect(result.authorId).toBe("user-123");
+		expect(result.authorEmail).toBe("alice@example.com");
+		// "monkey" and "turkey" contain "key" as a substring, not a word component
+		expect(result.monkey).toBe("data");
+		expect(result.turkey).toBe("data");
+		// These MUST still be redacted
+		expect(result.authToken).toBe("[REDACTED]");
+		expect(result.token).toBe("[REDACTED]");
+		expect(result.password).toBe("[REDACTED]");
+	});
+
 	it("redacts sensitive data inside Error message via nested walk", () => {
 		const err = new Error("failed");
 		const result = redact({ err, apiKey: "secret" }) as Record<string, unknown>;

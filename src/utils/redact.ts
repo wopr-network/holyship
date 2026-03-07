@@ -1,4 +1,12 @@
-const SENSITIVE_KEY_RE = /token|key|secret|password|bearer|auth|credential/i;
+// Sensitive term must appear as a whole word component in camelCase/snake_case keys.
+// Split on underscores and camelCase boundaries before matching, so e.g. "authHeader"
+// is redacted (contains "auth" as a component) but "authorId" is not ("author" ≠ "auth").
+const SENSITIVE_TERMS = new Set(["token", "key", "secret", "password", "bearer", "auth", "credential"]);
+function isSensitiveKey(k: string): boolean {
+  // Split on: underscores, spaces, or camelCase transitions (lower→upper, upper→upper+lower)
+  const words = k.split(/[_\s]+|(?<=[a-z\d])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/);
+  return words.some((w) => SENSITIVE_TERMS.has(w.toLowerCase()));
+}
 const DESCRIPTION_MAX = 100;
 
 // Patterns to strip from string content
@@ -44,7 +52,7 @@ function walk(value: unknown, seen: WeakSet<object>): unknown {
   for (const k of Object.keys(obj)) {
     const v = obj[k];
 
-    if (SENSITIVE_KEY_RE.test(k)) {
+    if (isSensitiveKey(k)) {
       result[k] = "[REDACTED]";
     } else if (k === "description" && typeof v === "string" && v.length > DESCRIPTION_MAX) {
       result[k] = `${v.slice(0, DESCRIPTION_MAX)}...`;
