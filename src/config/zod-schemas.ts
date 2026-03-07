@@ -35,6 +35,7 @@ export const StateDefinitionSchema = z.object({
   mode: z.enum(["passive", "active"]).optional().default("passive"),
   promptTemplate: z
     .string()
+    .min(1)
     .refine((val) => validateTemplate(val), {
       message: "promptTemplate contains disallowed Handlebars expressions",
     })
