@@ -73,7 +73,7 @@ export function validateWorkerToken(opts: {
   if (networkActive && !token) {
     throw new Error(
       "DEFCON_WORKER_TOKEN must be set when using HTTP or SSE transport. " +
-        "Worker tools (flow.claim, flow.report, flow.fail) are accessible over the network and require authentication. " +
+        "Worker tools (flow.*) are accessible over the network and require authentication. " +
         "Set DEFCON_WORKER_TOKEN in your environment or use stdio transport for local-only access.",
     );
   }

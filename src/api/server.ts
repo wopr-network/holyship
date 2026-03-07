@@ -20,7 +20,7 @@ export interface HttpServerDeps {
 }
 
 function requireWorkerToken(deps: HttpServerDeps, req: ParsedRequest): ApiResponse | null {
-  const configuredToken = deps.workerToken || undefined; // treat "" as unset
+  const configuredToken = deps.workerToken?.trim() || undefined; // treat "" and whitespace-only as unset
   if (!configuredToken) return null; // open mode
   const callerToken = extractBearerToken(req.authorization);
   if (!callerToken) {
@@ -102,7 +102,7 @@ export function createHttpServer(deps: HttpServerDeps): http.Server {
     const args = { role: req.body?.role as string, flow: req.params.flow };
     const result = await callToolHandler(deps.mcpDeps, "flow.claim", args);
     const apiRes = mcpResultToApi(result);
-    if (apiRes.status === 200 && apiRes.body === null) return { status: 204, body: null };
+    if (apiRes.status === 204) return { status: 204, body: null };
     return apiRes;
   });
 
