@@ -428,6 +428,9 @@ function errorResult(message: string) {
   };
 }
 
+const RETRY_SHORT_MS = 30_000; // entities exist but all claimed
+const RETRY_LONG_MS = 300_000; // backlog empty
+
 function noWorkResult(retryAfterMs: number, role: string): ReturnType<typeof jsonResult> {
   return jsonResult({
     next_action: "check_back",
@@ -458,14 +461,14 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
     const flow = await deps.flows.getByName(flowName);
     if (!flow) return errorResult(`Flow not found: ${flowName}`);
     // Discipline must match — null discipline flows are claimable by any role
-    if (flow.discipline !== null && flow.discipline !== role) return noWorkResult(300_000, role);
+    if (flow.discipline !== null && flow.discipline !== role) return noWorkResult(RETRY_LONG_MS, role);
     candidateFlows = [flow];
   } else {
     const allFlows = await deps.flows.list();
     candidateFlows = allFlows.filter((f) => f.discipline === null || f.discipline === role);
   }
 
-  if (candidateFlows.length === 0) return noWorkResult(300_000, role);
+  if (candidateFlows.length === 0) return noWorkResult(RETRY_LONG_MS, role);
 
   // 2. Gather all unclaimed invocations across matching flows
   type CandidateInvocation = import("../repositories/interfaces.js").Invocation;
@@ -476,20 +479,17 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
   }
 
   if (allCandidates.length === 0) {
-    // Determine if entities exist but are all claimed (short retry) vs empty backlog (long retry)
-    // Check all states in candidateFlows (already discipline-filtered) for any existing entities.
-    // Use early-exit sequential loop to avoid unbounded parallel DB queries on large flows.
+    // Determine if entities exist but are all claimed (short retry) vs empty backlog (long retry).
+    // Use hasAnyInFlowAndState (SELECT 1 LIMIT 1) to avoid loading full entity rows across all states.
     let hasEntities = false;
-    outer: for (const flow of candidateFlows) {
-      for (const state of flow.states) {
-        const entities = await deps.entities.findByFlowAndState(flow.id, state.name);
-        if (entities.length > 0) {
-          hasEntities = true;
-          break outer;
-        }
+    for (const flow of candidateFlows) {
+      const stateNames = flow.states.map((s) => s.name);
+      if (await deps.entities.hasAnyInFlowAndState(flow.id, stateNames)) {
+        hasEntities = true;
+        break;
       }
     }
-    return noWorkResult(hasEntities ? 30_000 : 300_000, role);
+    return noWorkResult(hasEntities ? RETRY_SHORT_MS : RETRY_LONG_MS, role);
   }
 
   // 3. Load entities for priority sorting
@@ -584,7 +584,7 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
     }
   }
 
-  return noWorkResult(30_000, role);
+  return noWorkResult(RETRY_SHORT_MS, role);
 }
 
 async function handleFlowGetPrompt(deps: McpServerDeps, args: Record<string, unknown>) {

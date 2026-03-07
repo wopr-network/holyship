@@ -138,6 +138,7 @@ function createMockDeps(): McpServerDeps {
     create: async () => mockEntity(),
     get: async (id) => (id === "ent-1" ? mockEntity() : null),
     findByFlowAndState: async () => [mockEntity()],
+    hasAnyInFlowAndState: async () => true,
     transition: async (_id, toState) => mockEntity({ state: toState }),
     updateArtifacts: async () => {},
     claim: async () => mockEntity({ claimedBy: "agent-1" }),
@@ -349,6 +350,7 @@ describe("MCP tool handlers", () => {
   it("flow.claim returns structured check_back when no work available (empty backlog)", async () => {
     deps.invocations.findUnclaimedByFlow = async () => [];
     deps.entities.findByFlowAndState = async () => [];
+    deps.entities.hasAnyInFlowAndState = async () => false;
     const result = await callTool("flow.claim", { workerId: "wkr_test", role: "coder", flow: "test-flow" });
     const content = result.content as Array<{ type: string; text: string }>;
     const data = JSON.parse(content[0].text);
@@ -1067,6 +1069,7 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
     deps.flows.listAll = async () => [flow1];
     deps.invocations.findUnclaimedByFlow = async () => [];
     deps.entities.findByFlowAndState = async () => [];
+    deps.entities.hasAnyInFlowAndState = async () => false;
 
     const result = await callClaim({ workerId: "wkr_test", role: "engineering" });
     const data = parseResult(result as { content: Array<{ text: string }> });
@@ -1096,6 +1099,7 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
       if (stateName === "draft") return [mockEntity({ id: "ent-claimed", claimedBy: "wkr_other" })];
       return [];
     };
+    deps.entities.hasAnyInFlowAndState = async () => true;
 
     const result = await callClaim({ workerId: "wkr_test", role: "coder" });
     const data = parseResult(result as { content: Array<{ text: string }> });
@@ -1115,6 +1119,7 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
       if (stateName === "draft") return [mockEntity({ id: "ent-eng", claimedBy: "wkr_other" })];
       return [];
     };
+    deps.entities.hasAnyInFlowAndState = async () => true;
 
     const result = await callClaim({ workerId: "wkr_eng", role: "engineering" });
     const data = parseResult(result as { content: Array<{ text: string }> });
