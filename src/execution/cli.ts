@@ -196,7 +196,7 @@ program
           await server.connect(transport);
         } else if (req.url?.startsWith("/messages") && req.method === "POST") {
           const url = new URL(req.url, `http://localhost:${port}`);
-          const sessionId = url.searchParams.get("sessionId") ?? "";
+          const sessionId = resolveSessionId(req.headers, url.searchParams);
           const transport = transports.get(sessionId);
           if (transport) {
             await transport.handlePostMessage(req, res);
@@ -526,6 +526,26 @@ function extractBearerToken(header: string | undefined): string | undefined {
   if (!header) return undefined;
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim();
+}
+
+/**
+ * Resolves the MCP session ID for POST /messages routing.
+ *
+ * Prefers the X-Session-Id request header over the ?sessionId= query parameter.
+ * Using a header prevents the session ID from appearing in nginx/ALB/CloudTrail
+ * access logs, which would enable session hijacking.
+ *
+ * Exported for unit testing.
+ */
+export function resolveSessionId(
+  headers: Record<string, string | string[] | undefined>,
+  searchParams: URLSearchParams,
+): string {
+  const header = headers["x-session-id"];
+  if (header) {
+    return Array.isArray(header) ? header[0] : header;
+  }
+  return searchParams.get("sessionId") ?? "";
 }
 
 program.parseAsync(process.argv).catch((err) => {

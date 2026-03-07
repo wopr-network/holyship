@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveSessionId } from "../../src/execution/cli.js";
 
 const CLI = join(import.meta.dirname, "../../src/execution/cli.ts");
 
@@ -146,6 +147,32 @@ describe("CLI", () => {
     expect(output).toContain("--flow");
     expect(output).toContain("--filter");
     expect(output).toContain("--dry-run");
+  });
+});
+
+describe("resolveSessionId", () => {
+  it("returns sessionId from X-Session-Id header when present", () => {
+    const params = new URLSearchParams("sessionId=query-id");
+    const result = resolveSessionId({ "x-session-id": "header-id" }, params);
+    expect(result).toBe("header-id");
+  });
+
+  it("falls back to query param when X-Session-Id header is absent", () => {
+    const params = new URLSearchParams("sessionId=query-id");
+    const result = resolveSessionId({}, params);
+    expect(result).toBe("query-id");
+  });
+
+  it("returns empty string when neither header nor query param is present", () => {
+    const params = new URLSearchParams();
+    const result = resolveSessionId({}, params);
+    expect(result).toBe("");
+  });
+
+  it("uses first value when X-Session-Id header is an array", () => {
+    const params = new URLSearchParams();
+    const result = resolveSessionId({ "x-session-id": ["first-id", "second-id"] }, params);
+    expect(result).toBe("first-id");
   });
 
   it("serve rejects non-numeric --reaper-interval", () => {
