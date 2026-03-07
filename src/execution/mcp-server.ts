@@ -859,8 +859,27 @@ async function handleQueryFlow(deps: McpServerDeps, args: Record<string, unknown
 }
 
 async function handleQueryFlows(deps: McpServerDeps) {
-  const flows = await deps.flows.listAll();
-  return jsonResult(flows);
+  const flows = await deps.flows.list();
+  return jsonResult(
+    flows.map((f) => ({
+      id: f.id,
+      name: f.name,
+      description: f.description,
+      initialState: f.initialState,
+      discipline: f.discipline,
+      version: f.version,
+      states: f.states.map(({ id, flowId, name, modelTier, mode, constraints, onEnter }) => ({
+        id,
+        flowId,
+        name,
+        modelTier,
+        mode,
+        constraints,
+        onEnter,
+      })),
+      transitions: f.transitions,
+    })),
+  );
 }
 
 async function handleAdminEntityCreate(deps: McpServerDeps, args: Record<string, unknown>) {

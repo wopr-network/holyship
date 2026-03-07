@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMcpServer } from "../../src/execution/mcp-server.js";
 import type { McpServerDeps } from "../../src/execution/mcp-server.js";
 import { Engine } from "../../src/engine/engine.js";
@@ -448,7 +448,7 @@ describe("MCP tool handlers", () => {
     expect(result.isError).toBe(true);
   });
 
-  it("query.flows returns all flow definitions", async () => {
+  it("query.flows returns all flow definitions without promptTemplate", async () => {
     const result = await callTool("query.flows", {});
     const content = result.content as Array<{ type: string; text: string }>;
     const data = JSON.parse(content[0].text);
@@ -457,10 +457,15 @@ describe("MCP tool handlers", () => {
     expect(data[0]).toHaveProperty("name", "test-flow");
     expect(data[0]).toHaveProperty("states");
     expect(data[0]).toHaveProperty("transitions");
+    // promptTemplate must not be exposed in list responses
+    for (const state of data[0].states) {
+      expect(state).not.toHaveProperty("promptTemplate");
+    }
   });
 
   it("query.flows returns empty array when no flows exist", async () => {
-    deps.flows.listAll = async () => [];
+    const localList = vi.fn(async () => []);
+    deps.flows.list = localList;
     const result = await callTool("query.flows", {});
     const content = result.content as Array<{ type: string; text: string }>;
     const data = JSON.parse(content[0].text);
