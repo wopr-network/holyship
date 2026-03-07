@@ -255,13 +255,15 @@ describe("HTTP Server - basic", () => {
     expect(res.status).toBe(404);
   });
 
-  it("POST /api/claim returns 204 when no work available", async () => {
+  it("POST /api/claim returns 200 with check_back when no work available", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/claim`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "worker" }),
     });
-    expect([204, 200]).toContain(res.status);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.next_action).toBe("check_back");
   });
 
   it("POST /api/entities/:id/report for nonexistent entity", async () => {
