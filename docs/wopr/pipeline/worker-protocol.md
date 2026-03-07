@@ -13,30 +13,44 @@ DEFCON exposes the worker protocol as two MCP tools:
 ```json
 {
   "workerId": "wkr_abc123",
-  "agentRole": "reviewer"
+  "role": "engineering",
+  "flow": "wopr-changeset"
 }
 ```
 
-Both fields are optional. If `workerId` is omitted, DEFCON auto-registers a new worker and returns the ID in the response — the worker must carry it forward on every subsequent call.
-
-`agentRole` filters claims to invocations matching that role. Omit to claim any available work.
+- `workerId` — required after first call. Omit on first call only — DEFCON auto-registers and returns a new ID with a prominent notice.
+- `role` — discipline: `"engineering"`, `"devops"`, `"qa"`, or `"security"`. Routes claim to matching flows.
+- `flow` — optional. Restrict to one flow. Omit to claim across all flows in the discipline.
 
 **Response (work available):**
 ```json
 {
+  "workerId": "wkr_abc123",
   "entityId": "feat-392",
   "invocationId": "inv_xyz",
-  "stage": "reviewing",
-  "prompt": "Check CI on the PR at https://github.com/...",
-  "workerId": "wkr_abc123"
+  "flow": "wopr-changeset",
+  "stage": "architecting",
+  "prompt": "You are the engineering worker for feat-392..."
 }
 ```
 
 **Response (no work available):**
 ```json
 {
+  "next_action": "check_back",
+  "retry_after_ms": 30000,
+  "message": "No work available for discipline 'engineering'. Call flow.claim again after the retry delay."
+}
+```
+
+**Response (first call, no workerId):**
+```json
+{
+  "worker_notice": "NO WORKER ID PROVIDED. A worker has been registered: wkr_abc123. YOU MUST pass workerId: \"wkr_abc123\" in ALL future flow calls. Omitting it will register a new worker each time.",
   "workerId": "wkr_abc123",
-  "invocation": null
+  "entityId": "feat-392",
+  "stage": "architecting",
+  "prompt": "..."
 }
 ```
 
@@ -209,13 +223,13 @@ The MCP client must not apply a short HTTP timeout to `flow.report`. The stdio t
 ## Spawning a Claude Code Session as a Worker
 
 ```bash
-defcon worker new --role reviewer --idle-timeout 1800
+defcon worker new --role engineering --idle-timeout 1800
 ```
 
 This registers a new worker and opens a Claude Code session with a rendered prompt:
 
 ```
-You are DEFCON worker wkr_abc123. Role: reviewer.
+You are DEFCON worker wkr_abc123. Discipline: engineering.
 Connected to DEFCON at <mcpUrl> via MCP.
 
 Use flow.claim to pick up available work, perform the task, then use
@@ -224,6 +238,12 @@ flow.report to submit your result. Pass your workerId in every call.
 Keep claiming until no work is available or you are told to stop.
 ```
 
-The human drives the session. DEFCON sees a registered worker. The claim/report protocol is identical to any other worker. The pipeline does not know or care that there's a human making the decisions.
+The human drives the session. DEFCON sees a registered worker with discipline `engineering`. The claim/report protocol is identical to any autonomous agent. The pipeline does not know or care that there's a human making the decisions.
 
-This is the mechanism for human-in-the-loop stages: define a stage with `agentRole: "human-reviewer"`, assign workers with that role to human sessions, and those stages will only be claimed by humans. The gate still runs. The escalation still holds. The human is just the one doing the work.
+Workers declare disciplines, not task roles. A human worker with `role: "engineering"` will receive architecting, coding, reviewing, fixing, and merging tasks — whatever engineering state the highest-priority entity is in.
+
+---
+
+See [disciplines.md](disciplines.md) for how discipline routing works.
+
+See [../../method/pipeline/worker-protocol.md](../../method/pipeline/worker-protocol.md) for the tool-agnostic protocol.
