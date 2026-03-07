@@ -3,7 +3,6 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { bootstrap } from "../../../src/main.js";
 import { DrizzleEventRepository } from "../../../src/repositories/drizzle/event.repo.js";
-import { events } from "../../../src/repositories/drizzle/schema.js";
 
 let db: BetterSQLite3Database;
 let sqlite: Database.Database;
@@ -25,7 +24,7 @@ describe("DrizzleEventRepository", () => {
     it("inserts a definition.changed event with flowId", async () => {
       await repo.emitDefinitionChanged("flow-1", "flow.create", { name: "test-flow" });
 
-      const rows = db.select().from(events).all();
+      const rows = repo.findAll();
       expect(rows).toHaveLength(1);
       expect(rows[0].type).toBe("definition.changed");
       expect(rows[0].flowId).toBe("flow-1");
@@ -38,7 +37,7 @@ describe("DrizzleEventRepository", () => {
     it("inserts a definition.changed event with null flowId", async () => {
       await repo.emitDefinitionChanged(null, "gate.create", { gateName: "lint" });
 
-      const rows = db.select().from(events).all();
+      const rows = repo.findAll();
       expect(rows).toHaveLength(1);
       expect(rows[0].flowId).toBeNull();
       expect(rows[0].payload).toEqual({ tool: "gate.create", gateName: "lint" });
@@ -47,7 +46,7 @@ describe("DrizzleEventRepository", () => {
     it("coerces empty string flowId to null", async () => {
       await repo.emitDefinitionChanged("", "flow.update", {});
 
-      const rows = db.select().from(events).all();
+      const rows = repo.findAll();
       expect(rows).toHaveLength(1);
       expect(rows[0].flowId).toBeNull();
     });
@@ -57,7 +56,7 @@ describe("DrizzleEventRepository", () => {
       await repo.emitDefinitionChanged("flow-1", "state.add", { b: 2 });
       await repo.emitDefinitionChanged("flow-2", "flow.create", { c: 3 });
 
-      const rows = db.select().from(events).all();
+      const rows = repo.findAll();
       expect(rows).toHaveLength(3);
       const ids = rows.map((r) => r.id);
       expect(new Set(ids).size).toBe(3);
@@ -68,7 +67,7 @@ describe("DrizzleEventRepository", () => {
       await repo.emitDefinitionChanged("flow-1", "flow.create", {});
       const after = Date.now();
 
-      const rows = db.select().from(events).all();
+      const rows = repo.findAll();
       expect(rows[0].emittedAt).toBeGreaterThanOrEqual(before);
       expect(rows[0].emittedAt).toBeLessThanOrEqual(after);
     });
@@ -77,7 +76,7 @@ describe("DrizzleEventRepository", () => {
       const payload = { nested: { key: "value" }, arr: [1, 2, 3], flag: true };
       await repo.emitDefinitionChanged("flow-1", "flow.update", payload);
 
-      const rows = db.select().from(events).all();
+      const rows = repo.findAll();
       expect(rows[0].payload).toEqual({ tool: "flow.update", ...payload });
     });
   });

@@ -3,11 +3,14 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { bootstrap } from "../../../src/main.js";
 import { DrizzleTransitionLogRepository } from "../../../src/repositories/drizzle/transition-log.repo.js";
-import { flowDefinitions, entities } from "../../../src/repositories/drizzle/schema.js";
+import { DrizzleFlowRepository } from "../../../src/repositories/drizzle/flow.repo.js";
+import { DrizzleEntityRepository } from "../../../src/repositories/drizzle/entity.repo.js";
 
 let db: BetterSQLite3Database;
 let sqlite: Database.Database;
 let repo: DrizzleTransitionLogRepository;
+let entityId1: string;
+let entityId2: string;
 
 beforeEach(async () => {
   const res = bootstrap(":memory:");
@@ -16,32 +19,13 @@ beforeEach(async () => {
   repo = new DrizzleTransitionLogRepository(db);
 
   // Seed flow + entities for FK constraints on entity_history
-  await db.insert(flowDefinitions).values({
-    id: "flow-1",
-    name: "test-flow",
-    initialState: "open",
-    version: 1,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
-  await db.insert(entities).values([
-    {
-      id: "entity-1",
-      flowId: "flow-1",
-      state: "open",
-      priority: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
-    {
-      id: "entity-2",
-      flowId: "flow-1",
-      state: "open",
-      priority: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
-  ]);
+  const flowRepo = new DrizzleFlowRepository(db);
+  const entityRepo = new DrizzleEntityRepository(db);
+  const flow = await flowRepo.create({ name: "test-flow", initialState: "open" });
+  const e1 = await entityRepo.create(flow.id, "open");
+  const e2 = await entityRepo.create(flow.id, "open");
+  entityId1 = e1.id;
+  entityId2 = e2.id;
 });
 
 afterEach(() => {
@@ -53,7 +37,7 @@ describe("DrizzleTransitionLogRepository", () => {
     it("records a transition and returns it with an id", async () => {
       const now = new Date();
       const result = await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: "open",
         toState: "in_progress",
         trigger: "claim",
@@ -62,7 +46,7 @@ describe("DrizzleTransitionLogRepository", () => {
       });
 
       expect(result.id).toBeTypeOf("string");
-      expect(result.entityId).toBe("entity-1");
+      expect(result.entityId).toBe(entityId1);
       expect(result.fromState).toBe("open");
       expect(result.toState).toBe("in_progress");
       expect(result.trigger).toBe("claim");
@@ -72,7 +56,7 @@ describe("DrizzleTransitionLogRepository", () => {
 
     it("records a transition with null fromState (initial transition)", async () => {
       const result = await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: null,
         toState: "open",
         trigger: null,
@@ -93,7 +77,7 @@ describe("DrizzleTransitionLogRepository", () => {
 
       // Insert out of order to verify sorting
       await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: "in_progress",
         toState: "done",
         trigger: "complete",
@@ -101,7 +85,7 @@ describe("DrizzleTransitionLogRepository", () => {
         timestamp: t3,
       });
       await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: null,
         toState: "open",
         trigger: null,
@@ -109,7 +93,7 @@ describe("DrizzleTransitionLogRepository", () => {
         timestamp: t1,
       });
       await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: "open",
         toState: "in_progress",
         trigger: "claim",
@@ -117,7 +101,7 @@ describe("DrizzleTransitionLogRepository", () => {
         timestamp: t2,
       });
 
-      const history = await repo.historyFor("entity-1");
+      const history = await repo.historyFor(entityId1);
 
       expect(history).toHaveLength(3);
       expect(history[0].toState).toBe("open");
@@ -132,7 +116,7 @@ describe("DrizzleTransitionLogRepository", () => {
     it("returns only history for the requested entity", async () => {
       const now = new Date();
       await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: null,
         toState: "open",
         trigger: null,
@@ -140,7 +124,7 @@ describe("DrizzleTransitionLogRepository", () => {
         timestamp: now,
       });
       await repo.record({
-        entityId: "entity-2",
+        entityId: entityId2,
         fromState: null,
         toState: "open",
         trigger: null,
@@ -148,13 +132,13 @@ describe("DrizzleTransitionLogRepository", () => {
         timestamp: now,
       });
 
-      const history1 = await repo.historyFor("entity-1");
-      const history2 = await repo.historyFor("entity-2");
+      const history1 = await repo.historyFor(entityId1);
+      const history2 = await repo.historyFor(entityId2);
 
       expect(history1).toHaveLength(1);
-      expect(history1[0].entityId).toBe("entity-1");
+      expect(history1[0].entityId).toBe(entityId1);
       expect(history2).toHaveLength(1);
-      expect(history2[0].entityId).toBe("entity-2");
+      expect(history2[0].entityId).toBe(entityId2);
     });
 
     it("returns empty array for unknown entity", async () => {
@@ -166,7 +150,7 @@ describe("DrizzleTransitionLogRepository", () => {
       const base = Date.now();
       for (let i = 0; i < 5; i++) {
         await repo.record({
-          entityId: "entity-1",
+          entityId: entityId1,
           fromState: `state-${i}`,
           toState: `state-${i + 1}`,
           trigger: `trigger-${i}`,
@@ -175,7 +159,7 @@ describe("DrizzleTransitionLogRepository", () => {
         });
       }
 
-      const history = await repo.historyFor("entity-1");
+      const history = await repo.historyFor(entityId1);
       expect(history).toHaveLength(5);
       const ids = history.map((h) => h.id);
       expect(new Set(ids).size).toBe(5);
@@ -187,7 +171,7 @@ describe("DrizzleTransitionLogRepository", () => {
     it("round-trips timestamp through epoch storage", async () => {
       const ts = new Date("2026-03-07T12:34:56.000Z");
       await repo.record({
-        entityId: "entity-1",
+        entityId: entityId1,
         fromState: "a",
         toState: "b",
         trigger: "go",
@@ -195,7 +179,7 @@ describe("DrizzleTransitionLogRepository", () => {
         timestamp: ts,
       });
 
-      const history = await repo.historyFor("entity-1");
+      const history = await repo.historyFor(entityId1);
       expect(history[0].timestamp.getTime()).toBe(ts.getTime());
     });
   });
