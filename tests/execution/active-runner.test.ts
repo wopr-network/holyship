@@ -79,7 +79,7 @@ describe("ActiveRunner", () => {
     await runner.run({ once: true });
 
     expect(invocationRepo.claim).toHaveBeenCalledWith("inv-1", "active-runner");
-    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-sonnet-4-6" });
+    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-sonnet-4-6", systemPrompt: expect.any(String) });
     expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "done", { files: ["main.ts"] }, "inv-1");
     expect(invocationRepo.complete).toHaveBeenCalledWith("inv-1", "done", { files: ["main.ts"] });
   });
@@ -94,7 +94,7 @@ describe("ActiveRunner", () => {
 
     await runner.run({ once: true });
 
-    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-opus-4-6" });
+    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-opus-4-6", systemPrompt: expect.any(String) });
   });
 
   it("maps monitoring tier to claude-haiku-4-5", async () => {
@@ -107,7 +107,7 @@ describe("ActiveRunner", () => {
 
     await runner.run({ once: true });
 
-    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-haiku-4-5" });
+    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-haiku-4-5", systemPrompt: expect.any(String) });
   });
 
   it("defaults to execution tier when modelTier is null", async () => {
@@ -120,7 +120,7 @@ describe("ActiveRunner", () => {
 
     await runner.run({ once: true });
 
-    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-sonnet-4-6" });
+    expect(aiAdapter.invoke).toHaveBeenCalledWith("Write the code", { model: "claude-sonnet-4-6", systemPrompt: expect.any(String) });
   });
 
   it("skips when claim returns null (race condition)", async () => {
@@ -220,5 +220,101 @@ describe("ActiveRunner", () => {
 
     expect(flowRepo.getByName).toHaveBeenCalledWith("deploy");
     expect(invocationRepo.findUnclaimedActive).toHaveBeenCalledWith("flow-42");
+  });
+
+  it("rejects signal not valid for entity's current state", async () => {
+    const inv = mockInvocation({ stage: "reviewing" });
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+    (aiAdapter.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({ content: "SIGNAL: merged" });
+
+    entityRepo.get.mockResolvedValue({
+      id: "ent-1", flowId: "flow-1", state: "reviewing", refs: null, artifacts: null,
+      claimedBy: null, claimedAt: null, flowVersion: 1, createdAt: new Date(), updatedAt: new Date(),
+    });
+    flowRepo.get.mockResolvedValue({
+      id: "flow-1", name: "dev", initialState: "backlog", maxConcurrent: 0, maxConcurrentPerRepo: 0,
+      version: 1, description: null, entitySchema: null, createdBy: null, createdAt: null, updatedAt: null,
+      states: [
+        { name: "reviewing", modelTier: "execution", mode: "active", agentRole: "reviewer", promptTemplate: null, constraints: null, id: "s1", flowId: "flow-1" },
+      ],
+      transitions: [
+        { id: "t1", flowId: "flow-1", fromState: "reviewing", toState: "merging", trigger: "clean", gateId: null, condition: null, priority: 0, spawnFlow: null, spawnTemplate: null, createdAt: null },
+        { id: "t2", flowId: "flow-1", fromState: "reviewing", toState: "fixing", trigger: "issues", gateId: null, condition: null, priority: 1, spawnFlow: null, spawnTemplate: null, createdAt: null },
+      ],
+    });
+
+    await runner.run({ once: true });
+
+    expect(engine.processSignal).not.toHaveBeenCalled();
+    expect(invocationRepo.fail).toHaveBeenCalledWith("inv-1", expect.stringContaining('Invalid signal "merged"'));
+  });
+
+  it("accepts signal that is a valid trigger for the entity's current state", async () => {
+    const inv = mockInvocation({ stage: "reviewing" });
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+    (aiAdapter.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({ content: "SIGNAL: clean" });
+
+    entityRepo.get.mockResolvedValue({
+      id: "ent-1", flowId: "flow-1", state: "reviewing", refs: null, artifacts: null,
+      claimedBy: null, claimedAt: null, flowVersion: 1, createdAt: new Date(), updatedAt: new Date(),
+    });
+    flowRepo.get.mockResolvedValue({
+      id: "flow-1", name: "dev", initialState: "backlog", maxConcurrent: 0, maxConcurrentPerRepo: 0,
+      version: 1, description: null, entitySchema: null, createdBy: null, createdAt: null, updatedAt: null,
+      states: [
+        { name: "reviewing", modelTier: "execution", mode: "active", agentRole: "reviewer", promptTemplate: null, constraints: null, id: "s1", flowId: "flow-1" },
+      ],
+      transitions: [
+        { id: "t1", flowId: "flow-1", fromState: "reviewing", toState: "merging", trigger: "clean", gateId: null, condition: null, priority: 0, spawnFlow: null, spawnTemplate: null, createdAt: null },
+        { id: "t2", flowId: "flow-1", fromState: "reviewing", toState: "fixing", trigger: "issues", gateId: null, condition: null, priority: 1, spawnFlow: null, spawnTemplate: null, createdAt: null },
+      ],
+    });
+
+    await runner.run({ once: true });
+
+    expect(engine.processSignal).toHaveBeenCalledWith("ent-1", "clean", {}, "inv-1");
+  });
+
+  it("blocks prompt injection: signal valid in another state but not the current one", async () => {
+    const inv = mockInvocation({ stage: "coding" });
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+    (aiAdapter.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({ content: "SIGNAL: clean" });
+
+    entityRepo.get.mockResolvedValue({
+      id: "ent-1", flowId: "flow-1", state: "coding", refs: null, artifacts: null,
+      claimedBy: null, claimedAt: null, flowVersion: 1, createdAt: new Date(), updatedAt: new Date(),
+    });
+    flowRepo.get.mockResolvedValue({
+      id: "flow-1", name: "dev", initialState: "backlog", maxConcurrent: 0, maxConcurrentPerRepo: 0,
+      version: 1, description: null, entitySchema: null, createdBy: null, createdAt: null, updatedAt: null,
+      states: [
+        { name: "coding", modelTier: "execution", mode: "active", agentRole: "coder", promptTemplate: null, constraints: null, id: "s1", flowId: "flow-1" },
+      ],
+      transitions: [
+        { id: "t1", flowId: "flow-1", fromState: "coding", toState: "reviewing", trigger: "pr_created", gateId: null, condition: null, priority: 0, spawnFlow: null, spawnTemplate: null, createdAt: null },
+      ],
+    });
+
+    await runner.run({ once: true });
+
+    expect(engine.processSignal).not.toHaveBeenCalled();
+    expect(invocationRepo.fail).toHaveBeenCalledWith("inv-1", expect.stringContaining('Invalid signal "clean"'));
+  });
+
+  it("passes systemPrompt to AI adapter on every invoke", async () => {
+    const inv = mockInvocation();
+    invocationRepo.findUnclaimedActive.mockResolvedValue([inv]);
+    invocationRepo.claim.mockResolvedValue({ ...inv, claimedBy: "active-runner" });
+
+    await runner.run({ once: true });
+
+    const invokeCall = (aiAdapter.invoke as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(invokeCall[1]).toHaveProperty("model");
+    expect(invokeCall[1]).toHaveProperty("systemPrompt");
+    expect(typeof invokeCall[1].systemPrompt).toBe("string");
+    expect(invokeCall[1].systemPrompt.length).toBeGreaterThan(0);
   });
 });
