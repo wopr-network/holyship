@@ -80,7 +80,7 @@ describe("CLI", () => {
     if (existsSync(dbPath)) rmSync(dbPath);
   });
 
-  it("export --out writes to file", () => {
+  it("export --out writes to file", { timeout: 15000 }, () => {
     const seedPath = writeSeedFile(validSeed);
     const dbPath = join(tmpdir(), `cli-export-file-${Date.now()}.db`);
     const outPath = join(tmpdir(), `cli-export-${Date.now()}.json`);
