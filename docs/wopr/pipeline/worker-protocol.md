@@ -72,8 +72,8 @@ DEFCON exposes the worker protocol as two MCP tools:
 
 ```json
 {
-  "workerId": "wkr_abc123",
-  "entityId": "feat-392",
+  "worker_id": "wkr_abc123",
+  "entity_id": "feat-392",
   "signal": "clean",
   "artifacts": {
     "prUrl": "https://github.com/...",
