@@ -282,5 +282,11 @@ export function createHttpServer(deps: HttpServerDeps): http.Server {
     }
   });
 
+  // Disable Node's default request/headers timeouts. flow.report blocks for the
+  // duration of gate evaluation, which can take many minutes (e.g. CI pipeline).
+  // Node's default 5-minute requestTimeout would silently kill these connections.
+  server.requestTimeout = 0;
+  server.headersTimeout = 0;
+
   return server;
 }

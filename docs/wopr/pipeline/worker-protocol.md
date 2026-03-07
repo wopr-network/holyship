@@ -218,6 +218,17 @@ If `flow.report` were non-blocking — if it returned "submitted, check back lat
 
 The MCP client must not apply a short HTTP timeout to `flow.report`. The stdio transport has no timeout by default. For HTTP/SSE transports, configure an explicit long timeout (24h is safe) on this tool specifically.
 
+### HTTP Transport Configuration
+
+The Node.js HTTP server sets `requestTimeout = 0` and `headersTimeout = 0` to prevent premature disconnects during long-running `flow.report` calls. Without this, Node's default 5-minute `requestTimeout` would silently kill connections when a gate takes longer than 5 minutes to evaluate.
+
+**For HTTP/SSE clients calling `/api/entities/:id/report`:**
+- Do not set a client-side timeout shorter than your longest gate's `timeout_ms`
+- A 24-hour client timeout is safe — the server will respond as soon as the gate resolves
+- If you must set a timeout, set it to at least `max(gate_timeout_ms) + 30s` across all gates in the flow
+
+**The stdio MCP transport is unaffected** — it has no HTTP timeout.
+
 ---
 
 ## Spawning a Claude Code Session as a Worker
