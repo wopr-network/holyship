@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -52,11 +52,13 @@ const validSeed = {
   integrations: [{ capability: "notifications", adapter: "discord", config: { webhookUrl: "https://example.com" } }],
 };
 
+const tmpRoot = realpathSync(tmpdir());
+
 describe("exportSeed", () => {
   it("exports current DB state as a valid SeedFile", async () => {
     const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
     const seedPath = writeSeedFile(validSeed);
-    await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite);
+    await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot });
 
     const exported = await exportSeed(flowRepo, gateRepo, integrationRepo);
 
@@ -97,7 +99,7 @@ describe("exportSeed", () => {
     const gateRepo1 = new DrizzleGateRepository(db1);
     const integrationRepo1 = new DrizzleIntegrationConfigRepository(db1);
     const seedPath = writeSeedFile(validSeed);
-    await loadSeed(seedPath, flowRepo1, gateRepo1, integrationRepo1, sqlite1);
+    await loadSeed(seedPath, flowRepo1, gateRepo1, integrationRepo1, sqlite1, { allowedRoot: tmpRoot });
 
     const exported = await exportSeed(flowRepo1, gateRepo1, integrationRepo1);
 
@@ -108,7 +110,7 @@ describe("exportSeed", () => {
     const gateRepo2 = new DrizzleGateRepository(db2);
     const integrationRepo2 = new DrizzleIntegrationConfigRepository(db2);
     const exportPath = writeSeedFile(exported);
-    await loadSeed(exportPath, flowRepo2, gateRepo2, integrationRepo2, sqlite2);
+    await loadSeed(exportPath, flowRepo2, gateRepo2, integrationRepo2, sqlite2, { allowedRoot: tmpRoot });
 
     const reExported = await exportSeed(flowRepo2, gateRepo2, integrationRepo2);
 

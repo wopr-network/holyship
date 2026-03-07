@@ -1,7 +1,7 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -52,12 +52,14 @@ const validSeed = {
   ],
 };
 
+const tmpRoot = realpathSync(tmpdir());
+
 describe("loadSeed", () => {
   it("loads a valid seed file and creates all records", async () => {
     const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
     const seedPath = writeSeedFile(validSeed);
 
-    const result = await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite);
+    const result = await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot });
 
     expect(result).toEqual({ flows: 1, gates: 1, integrations: 1 });
 
@@ -85,7 +87,7 @@ describe("loadSeed", () => {
     const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
     const seedPath = writeSeedFile({ flows: [], states: [], transitions: [] });
 
-    await expect(loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite)).rejects.toThrow();
+    await expect(loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot })).rejects.toThrow();
 
     sqlite.close();
   });
@@ -93,7 +95,7 @@ describe("loadSeed", () => {
   it("rejects non-existent file", async () => {
     const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
 
-    await expect(loadSeed("/tmp/nonexistent-seed.json", flowRepo, gateRepo, integrationRepo, sqlite)).rejects.toThrow();
+    await expect(loadSeed(join(tmpRoot, "nonexistent-seed.json"), flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot })).rejects.toThrow();
 
     sqlite.close();
   });
@@ -107,7 +109,7 @@ describe("loadSeed", () => {
     };
     const seedPath = writeSeedFile(seed);
 
-    const result = await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite);
+    const result = await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot });
     expect(result).toEqual({ flows: 1, gates: 0, integrations: 0 });
 
     sqlite.close();
@@ -127,9 +129,60 @@ describe("loadSeed", () => {
     const seedPath = writeSeedFile(seed);
 
     // The Zod schema validates gate references and throws with a descriptive message
-    await expect(loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite)).rejects.toThrow(
+    await expect(loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot })).rejects.toThrow(
       "nonexistent-gate",
     );
+
+    sqlite.close();
+  });
+
+  it("rejects a seed path outside the allowed root", async () => {
+    const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
+
+    await expect(
+      loadSeed("/etc/passwd", flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: "/home/fake" }),
+    ).rejects.toThrow("Seed path escapes allowed root");
+
+    sqlite.close();
+  });
+
+  it("rejects path traversal via relative segments", async () => {
+    const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
+    const cwd = process.cwd();
+
+    await expect(
+      loadSeed("../../etc/passwd", flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: cwd }),
+    ).rejects.toThrow("Seed path escapes allowed root");
+
+    sqlite.close();
+  });
+
+  it("rejects symlink escape", async () => {
+    const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
+
+    const dir = join(tmpRoot, `seed-symlink-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    const link = join(dir, "evil.json");
+    try {
+      symlinkSync("/etc/hostname", link);
+    } catch {
+      sqlite.close();
+      return;
+    }
+
+    await expect(
+      loadSeed(link, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: dir }),
+    ).rejects.toThrow("Seed path escapes allowed root");
+
+    sqlite.close();
+  });
+
+  it("accepts a seed path within the allowed root", async () => {
+    const { sqlite, flowRepo, gateRepo, integrationRepo } = setupDb();
+    const seedPath = writeSeedFile(validSeed);
+
+    const result = await loadSeed(seedPath, flowRepo, gateRepo, integrationRepo, sqlite, { allowedRoot: tmpRoot });
+    expect(result).toEqual({ flows: 1, gates: 1, integrations: 1 });
 
     sqlite.close();
   });
