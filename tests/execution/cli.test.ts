@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveSessionId } from "../../src/execution/cli.js";
+import { resolveSessionId, verifySessionToken } from "../../src/execution/cli.js";
 
 const CLI = join(import.meta.dirname, "../../src/execution/cli.ts");
 
@@ -180,6 +180,23 @@ describe("resolveSessionId", () => {
     const output = runExpectFail(["serve", "--reaper-interval", "abc"], { AGENTIC_DB_PATH: dbPath });
     expect(output).toMatch(/reaper-interval/i);
     if (existsSync(dbPath)) rmSync(dbPath);
+  });
+
+  it("verifySessionToken returns true when stored token matches incoming token", () => {
+    expect(verifySessionToken("secret-token", "secret-token")).toBe(true);
+  });
+
+  it("verifySessionToken returns false when incoming token does not match stored token", () => {
+    expect(verifySessionToken("secret-token", "wrong-token")).toBe(false);
+  });
+
+  it("verifySessionToken returns false when incoming token is absent but stored token exists", () => {
+    expect(verifySessionToken("secret-token", undefined)).toBe(false);
+  });
+
+  it("verifySessionToken returns true when no token was stored at handshake (unauthenticated session)", () => {
+    expect(verifySessionToken(undefined, undefined)).toBe(true);
+    expect(verifySessionToken(undefined, "any-token")).toBe(true);
   });
 
   it("serve rejects --reaper-interval below 1000", () => {

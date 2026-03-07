@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash, timingSafeEqual } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import Database from "better-sqlite3";
@@ -182,15 +183,22 @@ program
 
       // Map session IDs to transports for POST routing
       const transports = new Map<string, InstanceType<typeof SSEServerTransport>>();
+      // Map session IDs to the bearer token used at SSE handshake (for per-request re-verification)
+      const sessionTokens = new Map<string, string | undefined>();
 
       const httpServer = http.createServer(async (req, res) => {
         if (req.url === "/sse" && req.method === "GET") {
+          const callerToken = extractBearerToken(req.headers.authorization);
           const transport = new SSEServerTransport("/messages", res);
           transports.set(transport.sessionId, transport);
-          res.on("close", () => transports.delete(transport.sessionId));
+          sessionTokens.set(transport.sessionId, callerToken);
+          res.on("close", () => {
+            transports.delete(transport.sessionId);
+            sessionTokens.delete(transport.sessionId);
+          });
           const mcpOpts: McpServerOpts = {
             adminToken,
-            callerToken: extractBearerToken(req.headers.authorization),
+            callerToken,
           };
           const server = createMcpServer(deps, mcpOpts);
           await server.connect(transport);
@@ -198,10 +206,12 @@ program
           const url = new URL(req.url, `http://localhost:${port}`);
           const sessionId = resolveSessionId(req.headers, url.searchParams);
           const transport = transports.get(sessionId);
-          if (transport) {
-            await transport.handlePostMessage(req, res);
-          } else {
+          if (!transport) {
             res.writeHead(404).end("Session not found");
+          } else if (!verifySessionToken(sessionTokens.get(sessionId), extractBearerToken(req.headers.authorization))) {
+            res.writeHead(401).end("Unauthorized");
+          } else {
+            await transport.handlePostMessage(req, res);
           }
         } else {
           res.writeHead(404).end();
@@ -521,6 +531,32 @@ program
     console.log(`Ingested ${created} entities into flow "${opts.flow}"`);
     sqlite.close();
   });
+
+/**
+ * Verifies that the token on an incoming POST /messages request matches the
+ * token that was presented at SSE handshake time.
+ *
+ * Rules:
+ * - If no token was stored at handshake (unauthenticated connection), any
+ *   incoming token (or lack thereof) is accepted — the session itself was
+ *   already established without auth.
+ * - If a token WAS stored at handshake, the incoming request must supply the
+ *   same token (timing-safe comparison). Missing or mismatched → reject.
+ *
+ * Exported for unit testing.
+ */
+export function verifySessionToken(storedToken: string | undefined, incomingToken: string | undefined): boolean {
+  if (!storedToken) {
+    // Session was established without a token; no per-request check needed.
+    return true;
+  }
+  if (!incomingToken) {
+    return false;
+  }
+  const hashStored = createHash("sha256").update(storedToken).digest();
+  const hashIncoming = createHash("sha256").update(incomingToken).digest();
+  return timingSafeEqual(hashStored, hashIncoming);
+}
 
 function extractBearerToken(header: string | undefined): string | undefined {
   if (!header) return undefined;
