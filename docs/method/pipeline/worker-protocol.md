@@ -17,6 +17,75 @@ This is not a limitation. It's the point. An agent that knows "if I say X, we sk
 
 ---
 
+## Disciplines and Claiming
+
+Workers declare a **discipline** — what kind of mind they are, not what task they will perform.
+
+`claim(role: "engineering")` means: I am an engineering mind. Give me engineering work. The pipeline finds all flows with `discipline: "engineering"`, finds the highest-priority claimable entity across all of them, and returns it. The worker never picks. The pipeline picks.
+
+An engineering worker IS the architect, coder, reviewer, fixer, and merger. These are not separate roles — they are states within one discipline. The worker owns the entity end-to-end via sequential `report` calls. The state changes. The worker doesn't.
+
+Flows declare their discipline. States do not have roles.
+
+See [disciplines.md](disciplines.md) for the full discipline model.
+
+---
+
+## When No Work Is Available
+
+`claim` never returns bare null. When no work is available, it returns a structured response:
+
+```
+{
+  next_action: "check_back",
+  retry_after_ms: 30000,
+  message: "No work available. 3 entities are active but all claimed. Call claim again after the retry delay."
+}
+```
+
+Same semantics as a gate timeout on `report`. The worker waits and retries. Two situations produce different retry delays: all entities claimed (short retry, 30s — something will free up) vs empty backlog (long retry, 5min — no work exists right now).
+
+### The Canonical Worker Loop
+
+```
+loop:
+  response = claim(role, workerId)
+
+  if response.next_action == "check_back":
+    wait(response.retry_after_ms)
+    continue
+
+  # Got work — stay on this entity until done or gated
+  while true:
+    # do work per response.prompt
+    response = report(workerId, entityId, signal, artifacts)
+
+    if response.next_action == "waiting":
+      break  # entity gated — return to claim loop
+
+    if response.next_action == "check_back":
+      wait(response.retry_after_ms)
+      continue  # re-report with same arguments
+
+    # next_action == "continue" — new prompt, continue loop
+```
+
+---
+
+## Worker Affinity
+
+When a worker reports, the entity records their identity. If the entity re-enters a claimable state within the same discipline, it is **reserved** for that worker for `affinity_window_ms` (default 5 minutes). The worker gets it back on next `claim` — ahead of other eligible workers.
+
+Affinity matters primarily in two cases:
+1. **Worker idles mid-work** — reaper releases the claim. Worker comes back, affinity returns the entity.
+2. **Discipline boundary handoff** — entity crosses from engineering to devops. The devops worker that picks it up gets affinity for the devops phase.
+
+Within a normal run (one claim, sequential reports), affinity is never exercised — the worker never releases the entity.
+
+Affinity expires if the worker doesn't claim within the window. The entity enters the open pool.
+
+---
+
 ## Workers
 
 Any process that can make two calls is a valid worker:
@@ -141,3 +210,7 @@ This model inverts that. Workers pull work via claim. Gates pull verdicts via re
 That inversion makes workers composable. A human, an agent, a script — all can participate in the same pipeline because they all speak the same two-call protocol. The pipeline doesn't care what's on the other end of the call. It cares that the call is made.
 
 See [WOPR implementation](../../wopr/pipeline/worker-protocol.md) for concrete schema and configuration.
+
+See [disciplines.md](disciplines.md) for how discipline routing determines which entities a worker receives.
+
+See [gate-taxonomy.md](../gates/gate-taxonomy.md) for the full gate outcome model.

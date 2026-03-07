@@ -72,7 +72,21 @@ These aren't suggestions in a prompt. They're shell commands the engine executes
 
 `claim` = *"I'm ready. What needs escalating?"*
 
-DEFCON hands the agent a prompt — the work for the current level. The agent doesn't know the flow. Doesn't know how many levels there are. Doesn't know what comes next. It just gets instructions and a signal to report when it's done. Pass a `workerId` so DEFCON knows who you are — if you don't have one yet, the first `claim` mints one for you and tells you to use it going forward.
+Workers declare a **discipline** — not a task role. `claim(role: "engineering")` means: I am an engineering mind. Give me the highest-priority engineering work across all engineering flows. The pipeline picks the entity; the worker never does. An engineering worker IS the architect, coder, reviewer, fixer, and merger — these are states within one discipline, not separate agents. One `claim`, then sequential `report`s until the entity is done or gated.
+
+DEFCON hands the agent a prompt — the work for the current state. The agent doesn't know the flow. Doesn't know how many states there are. Doesn't know what comes next. It just gets instructions and a signal to report when it's done. Pass a `workerId` so DEFCON knows who you are — if you don't have one yet, the first `claim` mints one for you and tells you to use it going forward.
+
+When no work is available, `claim` returns a structured response — never bare null:
+
+```json
+{
+  "next_action": "check_back",
+  "retry_after_ms": 30000,
+  "message": "No work available. Call claim again after the retry delay."
+}
+```
+
+Same semantics as a gate timeout on `report`. The worker waits and retries.
 
 `report` = *"I did the thing. Am I clear to advance?"*
 
@@ -226,6 +240,10 @@ Every transition is earned. Every gate is deterministic. Every failure feeds bac
 ## Documentation
 
 **[`docs/method/`](docs/method/)** — The principles. Tool-agnostic patterns for building gated AI pipelines. Why deterministic gates work. How agents, triggers, and gates compose. Adopt it with whatever tools you use.
+
+Key method docs: [worker protocol](docs/method/pipeline/worker-protocol.md) · [disciplines](docs/method/pipeline/disciplines.md) · [gate taxonomy](docs/method/gates/gate-taxonomy.md) · [event ingestion](docs/method/pipeline/event-ingestion.md)
+
+**[`docs/wopr/`](docs/wopr/)** — The WOPR implementation. Concrete configuration, tool-specific commands, and working examples for every method concept.
 
 **[`docs/adoption/`](docs/adoption/)** — The bridge. [Getting started](docs/adoption/getting-started.md), [checklist](docs/adoption/checklist.md), [migration guide](docs/adoption/migration-guide.md).
 

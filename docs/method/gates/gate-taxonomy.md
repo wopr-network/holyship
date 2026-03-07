@@ -25,7 +25,17 @@ Gates are not suggestions, warnings, or "consider this" comments. They are hard 
 
 Timeout is not failure. A gate that hasn't resolved yet has not said no. The worker calls report again after a delay. The gate may pass on the next attempt.
 
-Each outcome has a different prompt source — see the [worker protocol](../pipeline/worker-protocol.md) for the full prompt resolution model.
+Each outcome has a different prompt source:
+
+| Outcome | Prompt source |
+|---------|--------------|
+| Pass | Next state's `promptTemplate` — the flow defines what comes next |
+| Fail | Gate's `failure_prompt` — the flow author defines what the worker should know |
+| Timeout | Gate's `timeout_prompt` — the flow author defines what the worker should do while waiting |
+
+Gates and flows can define `failure_prompt` and `timeout_prompt` as Handlebars templates with access to `entity`, `gate.output`, and `flow` context. Gate-level overrides flow-level. Without a configured prompt, fail returns raw gate output and timeout returns a generic "not an error, call again" message.
+
+See [worker-protocol.md](../pipeline/worker-protocol.md) for how workers respond to each outcome.
 
 ---
 
@@ -220,3 +230,13 @@ You don't need all 11 categories on day one. Start with what you have:
 - [ ] Post-deploy verification
 
 Each gate you add reduces the surface area of problems that can reach production.
+
+---
+
+## Related: State onEnter Hooks
+
+Gates block *transitions* between states. A related primitive — `onEnter` — runs *before the first claim* on a state. When an entity enters a state with an `onEnter` configured, the engine runs a setup command, merges the output into entity artifacts, and only then makes the entity claimable.
+
+Use `onEnter` for environment provisioning: creating a git worktree, spinning up a container, reserving a resource. The setup outlives the worker — if a worker idles and the entity is reclaimed, the next worker gets the same artifacts and can continue.
+
+`onEnter` is not a gate. It does not block a transition. It prepares the environment for work to begin.
