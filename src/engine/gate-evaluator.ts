@@ -25,7 +25,25 @@ export async function evaluateGate(gate: Gate, entity: Entity, gateRepo: IGateRe
   } else if (gate.type === "function") {
     throw new Error(`Function gates not yet implemented: ${gate.functionRef}`);
   } else if (gate.type === "api") {
-    throw new Error(`API gates not yet implemented`);
+    if (!gate.apiConfig) {
+      return { passed: false, output: "Gate apiConfig is not configured" };
+    }
+    const hbs = (await import("./handlebars.js")).getHandlebars();
+    const url = hbs.compile(gate.apiConfig.url as string)(entity);
+    const method = (gate.apiConfig.method as string) ?? "GET";
+    const expectStatus = (gate.apiConfig.expectStatus as number) ?? 200;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), gate.timeoutMs ?? 10000);
+    try {
+      const res = await fetch(url, { method, signal: controller.signal });
+      passed = res.status === expectStatus;
+      output = `HTTP ${res.status}`;
+    } catch (err) {
+      passed = false;
+      output = err instanceof Error ? err.message : String(err);
+    } finally {
+      clearTimeout(timeout);
+    }
   } else {
     throw new Error(`Unknown gate type: ${gate.type}`);
   }
