@@ -6,7 +6,10 @@ set -euo pipefail
 LINEAR_ID="${1:?Usage: check-spec-posted.sh <linear-issue-id>}"
 LINEAR_API_KEY="${LINEAR_API_KEY:?LINEAR_API_KEY env var is required}"
 
-PAYLOAD=$(jq -n --arg id "$LINEAR_ID" '{"query": "query { issue(id: \($id)) { comments { nodes { body } } } }"}')
+PAYLOAD=$(jq -n --arg id "$LINEAR_ID" '{
+  "query": "query($id: String!) { issue(id: $id) { comments { nodes { body } } } }",
+  "variables": {"id": $id}
+}')
 RESPONSE=$(curl -s -f -X POST "https://api.linear.app/graphql" \
   -H "Authorization: Bearer ${LINEAR_API_KEY}" \
   -H "Content-Type: application/json" \

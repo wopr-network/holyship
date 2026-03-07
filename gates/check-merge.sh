@@ -32,7 +32,7 @@ while true; do
   esac
 
   # Check for CI failure in merge queue
-  if [ "$MERGE_STATUS" = "DIRTY" ] || [ "$MERGE_STATUS" = "BLOCKED" ]; then
+  if [ "$MERGE_STATUS" = "DIRTY" ] || [ "$MERGE_STATUS" = "BLOCKED" ] || [ "$MERGE_STATUS" = "UNSTABLE" ]; then
     RESULT=$(gh pr view "$PR" --repo "$REPO" --json state,mergeStateStatus,statusCheckRollup \
       --jq '{state: .state, mergeStatus: .mergeStateStatus, failing: [.statusCheckRollup // [] | .[] | select(.conclusion == "FAILURE") | .name]}')
     FAILING=$(echo "$RESULT" | jq -r '.failing[]' 2>/dev/null)

@@ -8,8 +8,13 @@ REPO="${2:?Usage: check-review-ready.sh <pr-number> <repo>}"
 
 # Check 1: All CI checks passing
 echo "Checking CI status..."
-if ! gh pr checks "$PR" --repo "$REPO" 2>&1; then
-  echo "CI checks not all passing for PR #$PR in $REPO"
+CHECKS_OUTPUT=$(gh pr checks "$PR" --repo "$REPO" 2>&1) || true
+if echo "$CHECKS_OUTPUT" | grep -qE '^\s*(fail|FAIL)'; then
+  echo "CI checks failing for PR #$PR in $REPO"
+  exit 1
+fi
+if echo "$CHECKS_OUTPUT" | grep -qiE '(pending|queued|in_progress)'; then
+  echo "CI checks still pending for PR #$PR in $REPO"
   exit 1
 fi
 echo "CI checks passed"
@@ -23,7 +28,7 @@ ALL_AUTHORS=$(printf '%s\n%s\n%s' "$COMMENTS" "$PR_COMMENTS" "$REVIEWS" | sort -
 
 BOTS_FOUND=0
 BOTS_MISSING=()
-for BOT in "qodo-merge[bot]" "coderabbitai[bot]" "sourcery-ai[bot]"; do
+for BOT in "qodo-code-review[bot]" "coderabbitai[bot]" "sourcery-ai[bot]"; do
   if echo "$ALL_AUTHORS" | grep -qF "$BOT"; then
     BOTS_FOUND=$((BOTS_FOUND + 1))
   else
