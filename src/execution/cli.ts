@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { createHash, timingSafeEqual } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 import { Command } from "commander";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -35,7 +37,7 @@ import {
 } from "../repositories/drizzle/schema.js";
 import { DrizzleTransitionLogRepository } from "../repositories/drizzle/transition-log.repo.js";
 import { ActiveRunner } from "./active-runner.js";
-import type { McpServerDeps } from "./mcp-server.js";
+import type { McpServerDeps, McpServerOpts } from "./mcp-server.js";
 import { createMcpServer, startStdioServer } from "./mcp-server.js";
 
 const DB_DEFAULT = process.env.AGENTIC_DB_PATH ?? "./agentic-flow.db";
@@ -119,6 +121,7 @@ program
   .description("Start MCP server")
   .option("--transport <type>", "Transport: stdio or sse", "stdio")
   .option("--port <number>", "Port for SSE transport", "3000")
+  .option("--host <addr>", "Bind address for SSE transport", "127.0.0.1")
   .option("--db <path>", "Database path", DB_DEFAULT)
   .option("--reaper-interval <ms>", "Reaper poll interval in milliseconds", REAPER_INTERVAL_DEFAULT)
   .option("--claim-ttl <ms>", "Claim TTL in milliseconds", CLAIM_TTL_DEFAULT)
@@ -172,6 +175,8 @@ program
     }
     const stopReaper = engine.startReaper(reaperInterval, claimTtl);
 
+    const adminToken = process.env.DEFCON_ADMIN_TOKEN || undefined;
+
     if (opts.transport === "sse") {
       const { SSEServerTransport } = await import("@modelcontextprotocol/sdk/server/sse.js");
       const http = await import("node:http");
@@ -179,31 +184,51 @@ program
 
       // Map session IDs to transports for POST routing
       const transports = new Map<string, InstanceType<typeof SSEServerTransport>>();
+      // Map session IDs to the SHA-256 hash of the bearer token used at SSE handshake
+      const sessionTokens = new Map<string, string | undefined>();
 
       const httpServer = http.createServer(async (req, res) => {
         if (req.url === "/sse" && req.method === "GET") {
+          const callerToken = extractBearerToken(req.headers.authorization);
           const transport = new SSEServerTransport("/messages", res);
           transports.set(transport.sessionId, transport);
-          res.on("close", () => transports.delete(transport.sessionId));
-          const server = createMcpServer(deps);
+          sessionTokens.set(
+            transport.sessionId,
+            callerToken != null ? createHash("sha256").update(callerToken).digest("hex") : undefined,
+          );
+          res.on("close", () => {
+            transports.delete(transport.sessionId);
+            sessionTokens.delete(transport.sessionId);
+          });
+          const mcpOpts: McpServerOpts = {
+            adminToken,
+            callerToken,
+          };
+          const server = createMcpServer(deps, mcpOpts);
           await server.connect(transport);
         } else if (req.url?.startsWith("/messages") && req.method === "POST") {
           const url = new URL(req.url, `http://localhost:${port}`);
-          const sessionId = url.searchParams.get("sessionId") ?? "";
+          const sessionId = resolveSessionId(req.headers, url.searchParams);
           const transport = transports.get(sessionId);
-          if (transport) {
-            await transport.handlePostMessage(req, res);
-          } else {
+          if (!transport) {
             res.writeHead(404).end("Session not found");
+          } else if (!verifySessionToken(sessionTokens.get(sessionId), extractBearerToken(req.headers.authorization))) {
+            res.writeHead(401).end("Unauthorized");
+          } else {
+            await transport.handlePostMessage(req, res);
           }
         } else {
           res.writeHead(404).end();
         }
       });
 
-      httpServer.listen(port, () => {
-        console.log(`MCP SSE server listening on port ${port}`);
+      const host = opts.host as string;
+      httpServer.listen(port, host, () => {
+        console.log(`MCP SSE server listening on ${host}:${port}`);
       });
+      if (!adminToken) {
+        console.warn("WARNING: DEFCON_ADMIN_TOKEN not set — admin tools are unauthenticated");
+      }
 
       const shutdown = () => {
         stopReaper().then(() => {
@@ -225,7 +250,8 @@ program
       };
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
-      await startStdioServer(deps);
+      const mcpOpts: McpServerOpts = { adminToken, stdioTrusted: true };
+      await startStdioServer(deps, mcpOpts);
     }
   });
 
@@ -510,7 +536,65 @@ program
     sqlite.close();
   });
 
-program.parseAsync(process.argv).catch((err) => {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+/**
+ * Verifies that the token on an incoming POST /messages request matches the
+ * token that was presented at SSE handshake time.
+ *
+ * Rules:
+ * - If no token was stored at handshake (unauthenticated connection), any
+ *   incoming token (or lack thereof) is accepted — the session itself was
+ *   already established without auth.
+ * - If a token WAS stored at handshake, the incoming request must supply the
+ *   same token (timing-safe comparison). Missing or mismatched → reject.
+ *
+ * Exported for unit testing.
+ */
+export function verifySessionToken(storedTokenHash: string | undefined, incomingToken: string | undefined): boolean {
+  if (!storedTokenHash) {
+    // Session was established without a token; no per-request check needed.
+    return true;
+  }
+  if (!incomingToken) {
+    return false;
+  }
+  const hashIncoming = createHash("sha256").update(incomingToken).digest("hex");
+  const storedBuf = Buffer.from(storedTokenHash, "hex");
+  const incomingBuf = Buffer.from(hashIncoming, "hex");
+  if (storedBuf.length !== incomingBuf.length) return false;
+  return timingSafeEqual(storedBuf, incomingBuf);
+}
+
+function extractBearerToken(header: string | undefined): string | undefined {
+  if (!header) return undefined;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim();
+}
+
+/**
+ * Resolves the MCP session ID for POST /messages routing.
+ *
+ * Prefers the X-Session-Id request header over the ?sessionId= query parameter.
+ * Using a header prevents the session ID from appearing in nginx/ALB/CloudTrail
+ * access logs, which would enable session hijacking.
+ *
+ * Exported for unit testing.
+ */
+export function resolveSessionId(
+  headers: Record<string, string | string[] | undefined>,
+  searchParams: URLSearchParams,
+): string {
+  const header = headers["x-session-id"];
+  if (header) {
+    return Array.isArray(header) ? header[0] : header;
+  }
+  return searchParams.get("sessionId") ?? "";
+}
+
+// Only run when invoked as the main entry point, not when imported as a module
+const isMain = process.argv[1] != null && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (isMain) {
+  program.parseAsync(process.argv).catch((err) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

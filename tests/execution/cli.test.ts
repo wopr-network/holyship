@@ -1,8 +1,14 @@
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+import { resolveSessionId, verifySessionToken } from "../../src/execution/cli.js";
 
 const CLI = join(import.meta.dirname, "../../src/execution/cli.ts");
 
@@ -147,7 +153,54 @@ describe("CLI", () => {
     expect(output).toContain("--filter");
     expect(output).toContain("--dry-run");
   });
+});
 
+describe("resolveSessionId", () => {
+  it("returns sessionId from X-Session-Id header when present", () => {
+    const params = new URLSearchParams("sessionId=query-id");
+    const result = resolveSessionId({ "x-session-id": "header-id" }, params);
+    expect(result).toBe("header-id");
+  });
+
+  it("falls back to query param when X-Session-Id header is absent", () => {
+    const params = new URLSearchParams("sessionId=query-id");
+    const result = resolveSessionId({}, params);
+    expect(result).toBe("query-id");
+  });
+
+  it("returns empty string when neither header nor query param is present", () => {
+    const params = new URLSearchParams();
+    const result = resolveSessionId({}, params);
+    expect(result).toBe("");
+  });
+
+  it("uses first value when X-Session-Id header is an array", () => {
+    const params = new URLSearchParams();
+    const result = resolveSessionId({ "x-session-id": ["first-id", "second-id"] }, params);
+    expect(result).toBe("first-id");
+  });
+});
+
+describe("verifySessionToken", () => {
+  it("returns true when stored token matches incoming token", () => {
+    expect(verifySessionToken(hashToken("secret-token"), "secret-token")).toBe(true);
+  });
+
+  it("returns false when incoming token does not match stored token", () => {
+    expect(verifySessionToken(hashToken("secret-token"), "wrong-token")).toBe(false);
+  });
+
+  it("returns false when incoming token is absent but stored token exists", () => {
+    expect(verifySessionToken(hashToken("secret-token"), undefined)).toBe(false);
+  });
+
+  it("returns true when no token was stored at handshake (unauthenticated session)", () => {
+    expect(verifySessionToken(undefined, undefined)).toBe(true);
+    expect(verifySessionToken(undefined, "any-token")).toBe(true);
+  });
+});
+
+describe("CLI validation", () => {
   it("serve rejects non-numeric --reaper-interval", () => {
     const dbPath = join(tmpdir(), `cli-serve-nan-${Date.now()}.db`);
     const output = runExpectFail(["serve", "--reaper-interval", "abc"], { AGENTIC_DB_PATH: dbPath });

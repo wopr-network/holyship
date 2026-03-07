@@ -52,9 +52,16 @@ hbs.compile = ((template: string, options?: CompileOptions) => {
   if (!validateTemplate(template)) {
     throw new Error(`Template contains disallowed Handlebars expressions: ${template}`);
   }
-  const compiled = originalCompile(template, { ...options, ...SAFE_COMPILE_OPTIONS });
+  let compiled: ReturnType<typeof originalCompile>;
+  try {
+    compiled = originalCompile(template, { ...options, ...SAFE_COMPILE_OPTIONS });
+  } catch (err) {
+    throw new Error(
+      `Template compilation failed: ${err instanceof Error ? err.message.slice(0, 100) : "unknown error"}`,
+    );
+  }
   return (context: unknown, runtimeOptions?: Handlebars.RuntimeOptions) =>
-    compiled(context, { ...SAFE_RUNTIME_OPTIONS, ...runtimeOptions });
+    compiled(context, { ...runtimeOptions, ...SAFE_RUNTIME_OPTIONS });
 }) as typeof hbs.compile;
 
 /** Get the shared Handlebars instance with all built-in helpers. */
