@@ -99,7 +99,7 @@ describe("StateDefinitionSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ").toLowerCase()).toContain("disallowed");
+      expect(messages.some((m) => m.toLowerCase().includes("disallowed"))).toBe(true);
     }
   });
 
@@ -212,7 +212,7 @@ describe("TransitionRuleSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ").toLowerCase()).toContain("disallowed");
+      expect(messages.some((m) => m.toLowerCase().includes("disallowed"))).toBe(true);
     }
   });
 
@@ -266,7 +266,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ")).toContain("nonexistent");
+      expect(messages.some((m) => m.includes("nonexistent"))).toBe(true);
     }
   });
 
@@ -279,7 +279,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ")).toContain("initialState");
+      expect(messages.some((m) => m.includes("initialState"))).toBe(true);
     }
   });
 
@@ -386,7 +386,7 @@ describe("SeedFileSchema", () => {
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
       // Must error on the flow reference in the transition
-      expect(messages.join("; ")).toContain("bad-flow");
+      expect(messages.some((m) => m.includes("bad-flow"))).toBe(true);
     }
   });
 
@@ -406,7 +406,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ").toLowerCase()).toContain("duplicate");
+      expect(messages.some((m) => m.toLowerCase().includes("duplicate"))).toBe(true);
     }
   });
 
@@ -426,7 +426,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ").toLowerCase()).toContain("duplicate");
+      expect(messages.some((m) => m.toLowerCase().includes("duplicate"))).toBe(true);
     }
   });
 
@@ -528,9 +528,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      const joined = messages.join("; ").toLowerCase();
-      expect(joined).toContain("circular");
-      expect(joined).toContain("flow-a");
+      expect(messages.some((m) => m.toLowerCase().includes("circular") && m.includes("flow-a"))).toBe(true);
     }
   });
 
@@ -555,7 +553,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ").toLowerCase()).toContain("circular");
+      expect(messages.some((m) => m.toLowerCase().includes("circular"))).toBe(true);
     }
   });
 
@@ -584,7 +582,7 @@ describe("SeedFileSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      expect(messages.join("; ").toLowerCase()).toContain("circular");
+      expect(messages.some((m) => m.toLowerCase().includes("circular"))).toBe(true);
     }
   });
 
