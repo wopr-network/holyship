@@ -62,7 +62,7 @@ describe("CLI", () => {
   it("init --seed loads a seed file", () => {
     const seedPath = writeSeedFile(validSeed);
     const dbPath = join(tmpdir(), `cli-db-${Date.now()}.db`);
-    const output = run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+    const output = run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
     expect(output).toContain("flows: 1");
     expect(output).toContain("gates: 1");
     if (existsSync(dbPath)) rmSync(dbPath);
@@ -71,8 +71,8 @@ describe("CLI", () => {
   it("init --seed --force drops existing data first", () => {
     const seedPath = writeSeedFile(validSeed);
     const dbPath = join(tmpdir(), `cli-force-${Date.now()}.db`);
-    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
-    const output = run(["init", "--seed", seedPath, "--force"], { AGENTIC_DB_PATH: dbPath });
+    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
+    const output = run(["init", "--seed", seedPath, "--force"], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
     expect(output).toContain("flows: 1");
     if (existsSync(dbPath)) rmSync(dbPath);
   });
@@ -80,7 +80,7 @@ describe("CLI", () => {
   it("export outputs valid JSON to stdout", () => {
     const seedPath = writeSeedFile(validSeed);
     const dbPath = join(tmpdir(), `cli-export-${Date.now()}.db`);
-    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
     const output = run(["export"], { AGENTIC_DB_PATH: dbPath });
     const parsed = JSON.parse(output);
     expect(parsed.flows).toHaveLength(1);
@@ -91,7 +91,7 @@ describe("CLI", () => {
     const seedPath = writeSeedFile(validSeed);
     const dbPath = join(tmpdir(), `cli-export-file-${Date.now()}.db`);
     const outPath = join(tmpdir(), `cli-export-${Date.now()}.json`);
-    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
     run(["export", "--out", outPath], { AGENTIC_DB_PATH: dbPath });
     const content = readFileSync(outPath, "utf-8");
     const parsed = JSON.parse(content);
@@ -117,7 +117,7 @@ describe("CLI", () => {
     const dbPath = join(tmpdir(), `cli-cors-${Date.now()}.db`);
     const seedPath = writeSeedFile(validSeed);
     try {
-      run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+      run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
 
       // Use port 0 to let the OS pick an ephemeral port
       const child = execFile("npx", ["tsx", CLI, "serve", "--transport", "sse", "--port", "0", "--db", dbPath], {
@@ -191,7 +191,7 @@ describe("CLI", () => {
   it("status prints table for initialized db", () => {
     const dbPath = join(tmpdir(), `cli-status-${Date.now()}.db`);
     const seedPath = writeSeedFile(validSeed);
-    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
     const output = run(["status"], { AGENTIC_DB_PATH: dbPath });
     expect(output).toContain("pr-review");
     if (existsSync(dbPath)) rmSync(dbPath);
@@ -200,7 +200,7 @@ describe("CLI", () => {
   it("status --json outputs valid JSON", { timeout: 15000 }, () => {
     const dbPath = join(tmpdir(), `cli-status-json-${Date.now()}.db`);
     const seedPath = writeSeedFile(validSeed);
-    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath });
+    run(["init", "--seed", seedPath], { AGENTIC_DB_PATH: dbPath, DEFCON_SEED_ROOT: tmpdir() });
     const output = run(["status", "--json"], { AGENTIC_DB_PATH: dbPath });
     const parsed = JSON.parse(output);
     expect(parsed).toHaveProperty("flows");
