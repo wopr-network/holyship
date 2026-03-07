@@ -337,7 +337,8 @@ const TOOL_DEFINITIONS = [
     description:
       "Create a new entity in a flow (seed). Equivalent to POST /api/entities. " +
       "Creates the entity at the flow's initial state and generates the first invocation if the initial state has an agent role. " +
-      "Returns the created entity with its ID.",
+      "Returns the full Entity object plus an optional invocation_id if the initial state created an invocation.",
+    // inputSchema mirrors FlowSeedSchema in src/execution/tool-schemas.ts — keep in sync
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -825,7 +826,13 @@ async function handleAdminEntityCreate(deps: McpServerDeps, args: Record<string,
   }
 
   const entity = await deps.engine.createEntity(flowName, refs);
-  return jsonResult({ entity_id: entity.id, flow: flowName, state: entity.state });
+  const invocations = await deps.invocations.findByEntity(entity.id);
+  const activeInvocation = invocations.find((inv) => !inv.completedAt && !inv.failedAt);
+  const result: Record<string, unknown> = { ...entity };
+  if (activeInvocation) {
+    result.invocation_id = activeInvocation.id;
+  }
+  return jsonResult(result);
 }
 
 /** Start the MCP server on stdio transport. */

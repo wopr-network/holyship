@@ -1165,9 +1165,11 @@ describe("admin.entity.create", () => {
 
     expect(result.isError).toBeUndefined();
     const data = JSON.parse(result.content[0].text);
-    expect(data.entity_id).toBe("ent-new");
-    expect(data.flow).toBe("test-flow");
+    expect(data.id).toBe("ent-new");
+    expect(data.flowId).toBe(createdEntity.flowId);
     expect(data.state).toBe("draft");
+    // invocation_id included when an active invocation exists
+    expect(data.invocation_id).toBe("inv-1");
   });
 
   it("passes refs to engine.createEntity", async () => {
