@@ -156,6 +156,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
     if (changes.createdBy !== undefined) updateValues.createdBy = changes.createdBy;
     if (changes.discipline !== undefined) updateValues.discipline = changes.discipline;
     if (changes.defaultModelTier !== undefined) updateValues.defaultModelTier = changes.defaultModelTier;
+    if (changes.timeoutPrompt !== undefined) updateValues.timeoutPrompt = changes.timeoutPrompt;
 
     this.db.update(flowDefinitions).set(updateValues).where(eq(flowDefinitions.id, id)).run();
 
@@ -269,6 +270,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       affinityWindowMs: flow.affinityWindowMs,
       version: flow.version,
       createdBy: flow.createdBy,
+      timeoutPrompt: flow.timeoutPrompt,
       createdAt: flow.createdAt,
       updatedAt: flow.updatedAt,
       discipline: flow.discipline,
@@ -328,6 +330,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       createdBy: string | null;
       discipline: string | null;
       defaultModelTier: string | null;
+      timeoutPrompt: string | null;
       states: State[];
       transitions: Transition[];
     };
@@ -382,6 +385,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
           createdBy: snap.createdBy,
           discipline: snap.discipline,
           defaultModelTier: snap.defaultModelTier ?? null,
+          timeoutPrompt: snap.timeoutPrompt,
           updatedAt: Date.now(),
         })
         .where(eq(flowDefinitions.id, flowId))
