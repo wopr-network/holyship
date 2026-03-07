@@ -379,7 +379,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
           version: snap.version,
           createdBy: snap.createdBy,
           discipline: snap.discipline,
-          defaultModelTier: snap.defaultModelTier,
+          defaultModelTier: snap.defaultModelTier ?? null,
           updatedAt: Date.now(),
         })
         .where(eq(flowDefinitions.id, flowId))
