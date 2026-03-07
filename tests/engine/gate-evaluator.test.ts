@@ -3,7 +3,16 @@ import { evaluateGate } from "../../src/engine/gate-evaluator.js";
 import type { Gate, Entity, IGateRepository } from "../../src/repositories/interfaces.js";
 
 vi.mock("../../src/engine/gate-command-validator.js", () => ({
-  validateGateCommand: () => ({ valid: true, resolvedPath: null, error: null }),
+  validateGateCommand: (cmd: string) => {
+    // Return a realistic resolvedPath so execFile receives the binary path, not the full command string.
+    // This preserves the TOCTOU fix (resolvedPath flows to runCommand) while keeping tests hermetic.
+    const binaryMap: Record<string, string> = {
+      "echo ok": "/usr/bin/echo",
+      "exit 1": "/bin/sh",
+      "sleep 10": "/usr/bin/sleep",
+    };
+    return { valid: true, resolvedPath: binaryMap[cmd] ?? null, error: null };
+  },
 }));
 
 function makeGate(overrides: Partial<Gate> = {}): Gate {
