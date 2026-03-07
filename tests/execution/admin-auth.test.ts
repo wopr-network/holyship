@@ -64,4 +64,19 @@ describe("admin auth guard", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).not.toContain("Unauthorized");
   });
+
+  it("allows admin.* calls when no callerToken is provided (stdio trust mode)", async () => {
+    // stdio passes adminToken but no callerToken — stdioTrusted bypasses auth
+    const opts: McpServerOpts = { adminToken: "secret-token-123", stdioTrusted: true };
+    const result = await callToolHandler(stubDeps, "admin.flow.create", {}, opts);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain("Unauthorized");
+  });
+
+  it("uses generic error message without env var name", async () => {
+    const opts: McpServerOpts = { adminToken: "secret-token-123" };
+    const result = await callToolHandler(stubDeps, "admin.flow.create", {}, opts);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toContain("DEFCON_ADMIN_TOKEN");
+  });
 });

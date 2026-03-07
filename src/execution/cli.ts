@@ -236,7 +236,7 @@ program
       };
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
-      const mcpOpts: McpServerOpts = { adminToken };
+      const mcpOpts: McpServerOpts = { adminToken, stdioTrusted: true };
       await startStdioServer(deps, mcpOpts);
     }
   });
@@ -525,7 +525,7 @@ program
 function extractBearerToken(header: string | undefined): string | undefined {
   if (!header) return undefined;
   const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1];
+  return match?.[1]?.trim();
 }
 
 program.parseAsync(process.argv).catch((err) => {

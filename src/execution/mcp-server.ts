@@ -43,6 +43,8 @@ export interface McpServerOpts {
   adminToken?: string;
   /** Token provided by the caller (from HTTP Authorization header, or undefined for stdio) */
   callerToken?: string;
+  /** When true, skip token validation (stdio is local-process-only and inherently trusted) */
+  stdioTrusted?: boolean;
 }
 
 const TOOL_DEFINITIONS = [
@@ -351,10 +353,10 @@ export async function callToolHandler(
     // Auth gate: admin.* tools require a valid token when one is configured
     if (name.startsWith("admin.")) {
       const configuredToken = opts?.adminToken || undefined; // treat "" as unset
-      if (configuredToken) {
+      if (configuredToken && !opts?.stdioTrusted) {
         const callerToken = opts?.callerToken;
         if (!callerToken || !constantTimeEqual(configuredToken, callerToken)) {
-          return errorResult("Unauthorized: valid DEFCON_ADMIN_TOKEN required for admin tools");
+          return errorResult("Unauthorized: admin tools require authentication. Check server configuration.");
         }
       }
     }
@@ -421,10 +423,13 @@ function errorResult(message: string) {
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
-  const encoder = new TextEncoder();
-  const bufA = encoder.encode(a);
-  const bufB = encoder.encode(b);
-  if (bufA.length !== bufB.length) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Run a dummy comparison to avoid leaking length via timing
+    timingSafeEqual(bufA, Buffer.alloc(bufA.length));
+    return false;
+  }
   return timingSafeEqual(bufA, bufB);
 }
 
