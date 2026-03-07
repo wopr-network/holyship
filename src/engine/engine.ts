@@ -386,10 +386,11 @@ export class Engine {
       await this.entityRepo.reapExpired(entityTtlMs);
     };
 
+    let currentTickPromise: Promise<void> = Promise.resolve();
     const timer = setInterval(() => {
       if (stopped || tickInFlight) return;
       tickInFlight = true;
-      tick()
+      currentTickPromise = tick()
         .catch((err) => {
           console.error("[reaper] error:", err);
         })
@@ -401,6 +402,7 @@ export class Engine {
     return async () => {
       stopped = true;
       clearInterval(timer);
+      await currentTickPromise;
     };
   }
 
