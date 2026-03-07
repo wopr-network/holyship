@@ -639,7 +639,14 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
     const message = err instanceof Error ? err.message : String(err);
     // processSignal failed after we already completed the invocation — create a
     // replacement so the entity can be reclaimed rather than being permanently orphaned.
-    await deps.invocations.create(entityId, activeInvocation.stage, activeInvocation.prompt, activeInvocation.mode);
+    await deps.invocations.create(
+      entityId,
+      activeInvocation.stage,
+      activeInvocation.prompt,
+      activeInvocation.mode,
+      undefined,
+      activeInvocation.context ?? undefined,
+    );
     return errorResult(message);
   }
 
@@ -650,8 +657,10 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
       if (entity) {
         const flow = await deps.flows.get(entity.flowId);
         const windowMs = flow?.affinityWindowMs ?? 300000;
-        const role = flow?.discipline ?? "default";
-        await deps.entities.setAffinity(entityId, workerId, role, new Date(Date.now() + windowMs));
+        const affinityRole = flow?.discipline;
+        if (affinityRole) {
+          await deps.entities.setAffinity(entityId, workerId, affinityRole, new Date(Date.now() + windowMs));
+        }
       }
     } catch (err) {
       console.error(`Failed to set affinity for entity ${entityId} worker ${workerId}:`, err);
@@ -661,7 +670,14 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
   // Gate blocked — create a replacement unclaimed invocation so the entity
   // can be reclaimed; without it the entity would be permanently orphaned.
   if (result.gated) {
-    await deps.invocations.create(entityId, activeInvocation.stage, activeInvocation.prompt, activeInvocation.mode);
+    await deps.invocations.create(
+      entityId,
+      activeInvocation.stage,
+      activeInvocation.prompt,
+      activeInvocation.mode,
+      undefined,
+      activeInvocation.context ?? undefined,
+    );
 
     if (result.gateTimedOut) {
       return jsonResult({
