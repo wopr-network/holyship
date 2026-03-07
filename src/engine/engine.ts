@@ -308,7 +308,11 @@ export class Engine {
               continue;
             }
 
-            await this.entityRepo.setAffinity(claimed.id, workerId, role, new Date(Date.now() + affinityWindow));
+            try {
+              await this.entityRepo.setAffinity(claimed.id, workerId, role, new Date(Date.now() + affinityWindow));
+            } catch (err) {
+              console.warn(`setAffinity failed for entity ${claimed.id} worker ${workerId} — continuing:`, err);
+            }
 
             const state = flow.states.find((s) => s.name === pending.stage);
             let build: { prompt: string; context: Record<string, unknown> | null };
