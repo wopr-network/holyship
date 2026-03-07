@@ -97,7 +97,51 @@ describe("evaluateGate", () => {
     const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
     expect(result.passed).toBe(false);
     expect(result.output).toBe("Gate apiConfig is not configured");
-    expect(gateRepo.record).not.toHaveBeenCalled();
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, "Gate apiConfig is not configured");
+  });
+
+  it("returns passed=false and records when apiConfig is missing", async () => {
+    const gate = makeGate({ type: "api", apiConfig: null });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, "Gate apiConfig is not configured");
+  });
+
+  it("returns passed=false when Handlebars template is malformed", async () => {
+    const gate = makeGate({
+      type: "api",
+      apiConfig: { url: "https://example.com/{{unclosed" },
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/Template error/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/Template error/));
+  });
+
+  it("returns passed=false when rendered URL uses non-https protocol", async () => {
+    const gate = makeGate({
+      type: "api",
+      apiConfig: { url: "http://example.com/check" },
+    });
+    const entity = makeEntity();
+    const gateRepo: Pick<IGateRepository, "record"> = {
+      record: vi.fn().mockResolvedValue({}),
+    };
+
+    const result = await evaluateGate(gate, entity, gateRepo as IGateRepository);
+    expect(result.passed).toBe(false);
+    expect(result.output).toMatch(/URL protocol not allowed/);
+    expect(gateRepo.record).toHaveBeenCalledWith("ent-1", "gate-1", false, expect.stringMatching(/URL protocol not allowed/));
   });
 
   it("returns passed=true for api gate with matching status", async () => {
