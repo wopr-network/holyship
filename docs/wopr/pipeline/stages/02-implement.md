@@ -6,6 +6,8 @@
 
 ## Worktree Setup via onEnter
 
+> **Note:** The `onEnter` hook on the `coding` state in `seeds/wopr-changeset.json` is currently `null`. The configuration below describes the intended behavior, which requires the `defcon provision-worktree` CLI tool (WOP-1895) to be merged before this hook is active.
+
 Before the `coding` state becomes claimable, DEFCON runs the `onEnter` hook configured on the state:
 
 ```json
@@ -115,8 +117,8 @@ Then calls `flow.report` with artifacts:
 
 ```json
 {
-  "workerId": "wkr_abc123",
-  "entityId": "feat-392",
+  "worker_id": "wkr_abc123",
+  "entity_id": "feat-392",
   "signal": "pr_created",
   "artifacts": {
     "prUrl": "https://github.com/wopr-network/wopr/pull/42",
@@ -125,7 +127,7 @@ Then calls `flow.report` with artifacts:
 }
 ```
 
-DEFCON evaluates `ci-green` then `review-bots-ready` gates before advancing to `reviewing`.
+DEFCON evaluates the `ci-green` gate before advancing to `reviewing`. The `review-bots-ready` gate runs later, on the `reviewing → merging` transition.
 
 ---
 

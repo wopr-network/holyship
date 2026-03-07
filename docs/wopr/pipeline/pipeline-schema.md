@@ -26,12 +26,12 @@ There is no in-memory pipeline state table. The database is the single source of
 State transitions are driven by `flow.report`. The claim/report cycle is:
 
 ```
-flow.claim({ workerId: "wkr_abc123", role: "engineering" })
+flow.claim({ worker_id: "wkr_abc123", role: "engineering" })
   → returns entity + rendered prompt for current state
 
 [worker performs work]
 
-flow.report({ workerId: "wkr_abc123", entityId: "feat-392", signal: "spec_ready" })
+flow.report({ worker_id: "wkr_abc123", entity_id: "feat-392", signal: "spec_ready" })
   → DEFCON evaluates gates on the transition
   → if gates pass: entity advances to next state, returns next prompt
   → if gate fails: entity enters "waiting", returns failure_prompt

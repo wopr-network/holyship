@@ -4,13 +4,11 @@
 
 ---
 
-## Gates Before Review
+## Gates
 
-Before the entity reaches the `reviewing` state, two gates must pass:
+**`ci-green`** — gates the `coding → reviewing` transition. CI checks on the PR must all pass before the entity enters the `reviewing` state. DEFCON runs `gates/ci-green.sh` which polls `gh pr checks`. If CI fails, the entity returns to `coding` with the `failure_prompt` surfacing the CI failure output.
 
-**`ci-green`**: CI checks on the PR must all pass. DEFCON runs `gates/ci-green.sh` which polls `gh pr checks`. If CI fails, the gate returns false, and the entity returns to `coding` with the `failure_prompt` surfacing the CI failure output.
-
-**`review-bots-ready`**: Automated review bots (Qodo, CodeRabbit, Devin, Sourcery) must all post. DEFCON runs `gates/review-bots-ready.sh`. If bots don't post within 10 minutes, the gate times out and the `timeout_prompt` instructs the reviewer to proceed with manual review.
+**`review-bots-ready`** — gates the `reviewing → merging` transition. Automated review bots (Qodo, CodeRabbit, Devin, Sourcery) must all post before the entity can advance to `merging`. DEFCON runs `gates/review-bots-ready.sh`. If bots don't post within 10 minutes, the gate times out and the `timeout_prompt` instructs the reviewer to proceed with manual review.
 
 ---
 
@@ -37,7 +35,7 @@ WOPR uses 4 automated review bots:
 | **Devin** | `devin-ai[bot]` | AI code review |
 | **Sourcery** | `sourcery-ai[bot]` | AI code review |
 
-The `review-bots-ready` gate blocks until all 4 have posted (or times out with a `timeout_prompt`).
+The `review-bots-ready` gate (on the `reviewing → merging` transition) blocks until all 4 have posted (or times out with a `timeout_prompt`).
 
 ### Layer 3: Agent Reviewer
 
@@ -83,8 +81,8 @@ The reviewer calls `flow.report` with either `clean` or `issues`:
 **CLEAN:**
 ```json
 {
-  "workerId": "wkr_abc123",
-  "entityId": "feat-392",
+  "worker_id": "wkr_abc123",
+  "entity_id": "feat-392",
   "signal": "clean"
 }
 ```
@@ -92,8 +90,8 @@ The reviewer calls `flow.report` with either `clean` or `issues`:
 **ISSUES:**
 ```json
 {
-  "workerId": "wkr_abc123",
-  "entityId": "feat-392",
+  "worker_id": "wkr_abc123",
+  "entity_id": "feat-392",
   "signal": "issues",
   "artifacts": {
     "reviewFindings": "Missing null check in auth.ts:42 (Qodo); Unused import in handler.ts:3 (agent review)"

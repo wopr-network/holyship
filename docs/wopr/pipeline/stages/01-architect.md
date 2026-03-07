@@ -81,8 +81,8 @@ Then calls `flow.report` (in passive mode) or DEFCON advances automatically (in 
 
 ```json
 {
-  "workerId": "wkr_abc123",
-  "entityId": "feat-392",
+  "worker_id": "wkr_abc123",
+  "entity_id": "feat-392",
   "signal": "spec_ready"
 }
 ```

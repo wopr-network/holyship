@@ -83,8 +83,8 @@ The fixer calls `flow.report`:
 
 ```json
 {
-  "workerId": "wkr_abc123",
-  "entityId": "feat-392",
+  "worker_id": "wkr_abc123",
+  "entity_id": "feat-392",
   "signal": "fixes_pushed"
 }
 ```

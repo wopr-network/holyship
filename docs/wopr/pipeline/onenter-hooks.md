@@ -55,6 +55,8 @@ The entity remains in a "pending" sub-state until a human resolves the issue (us
 
 ## WOPR Usage: Worktree Creation
 
+> **Note:** The `coding` state's `onEnter` in `seeds/wopr-changeset.json` is currently `null`. The configuration below is the intended target, pending the `defcon provision-worktree` CLI tool (WOP-1895).
+
 The canonical onEnter usage in WOPR is the `coding` state's worktree setup:
 
 ```json
