@@ -17,6 +17,7 @@ export interface HttpServerDeps {
   mcpDeps: McpServerDeps;
   adminToken?: string;
   workerToken?: string;
+  corsOrigin?: string; // explicit CORS origin, or undefined for loopback default
 }
 
 function requireWorkerToken(deps: HttpServerDeps, req: ParsedRequest): ApiResponse | null {
@@ -203,9 +204,18 @@ export function createHttpServer(deps: HttpServerDeps): http.Server {
   // --- HTTP server ---
   const server = http.createServer(async (req, res) => {
     // CORS
-    res.setHeader("Access-Control-Allow-Origin", process.env.DEFCON_CORS_ORIGIN ?? "http://localhost");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    const origin = req.headers.origin;
+    if (origin) {
+      const corsAllowed = deps.corsOrigin
+        ? origin === deps.corsOrigin // explicit origin: exact match only
+        : true; // loopback mode: reflect any origin (all loopback origins are safe)
+      if (corsAllowed) {
+        res.setHeader("Vary", "Origin");
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      }
+    }
     if (req.method === "OPTIONS") {
       res.writeHead(204).end();
       return;
