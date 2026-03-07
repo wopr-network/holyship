@@ -86,6 +86,28 @@ describe("StateDefinitionSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects promptTemplate containing disallowed Handlebars expressions", () => {
+    const result = StateDefinitionSchema.safeParse({
+      name: "open",
+      flowName: "pr-review",
+      promptTemplate: "{{lookup obj key}}",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message);
+      expect(messages.some((m) => m.toLowerCase().includes("disallowed"))).toBe(true);
+    }
+  });
+
+  it("accepts promptTemplate with safe Handlebars expressions", () => {
+    const result = StateDefinitionSchema.safeParse({
+      name: "open",
+      flowName: "pr-review",
+      promptTemplate: "Hello {{name}}, you have {{count}} items.",
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 // ─── GateDefinitionSchema ───
@@ -174,6 +196,32 @@ describe("TransitionRuleSchema", () => {
       toState: "reviewing",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("rejects condition containing disallowed Handlebars expressions", () => {
+    const result = TransitionRuleSchema.safeParse({
+      flowName: "pr-review",
+      fromState: "open",
+      toState: "reviewing",
+      trigger: "claim",
+      condition: "{{@root.secret}}",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message);
+      expect(messages.some((m) => m.toLowerCase().includes("disallowed"))).toBe(true);
+    }
+  });
+
+  it("accepts condition with safe Handlebars expressions", () => {
+    const result = TransitionRuleSchema.safeParse({
+      flowName: "pr-review",
+      fromState: "open",
+      toState: "reviewing",
+      trigger: "claim",
+      condition: "{{gt count 0}}",
+    });
+    expect(result.success).toBe(true);
   });
 });
 
