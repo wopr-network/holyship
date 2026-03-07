@@ -1,5 +1,5 @@
 // MCP server — passive mode (flow.claim, flow.report, query.*)
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -423,14 +423,9 @@ function errorResult(message: string) {
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) {
-    // Run a dummy comparison to avoid leaking length via timing
-    timingSafeEqual(bufA, Buffer.alloc(bufA.length));
-    return false;
-  }
-  return timingSafeEqual(bufA, bufB);
+  const hashA = createHash("sha256").update(a).digest();
+  const hashB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(hashA, hashB);
 }
 
 // ─── Tool Handlers ───
