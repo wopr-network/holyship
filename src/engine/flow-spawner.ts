@@ -16,5 +16,21 @@ export async function executeSpawn(
   const flow = await flowRepo.getByName(transition.spawnFlow);
   if (!flow) throw new Error(`Spawn flow "${transition.spawnFlow}" not found`);
 
-  return entityRepo.create(flow.id, flow.initialState, parentEntity.refs ?? undefined);
+  const childEntity = await entityRepo.create(flow.id, flow.initialState, parentEntity.refs ?? undefined);
+
+  try {
+    await entityRepo.appendSpawnedChild(parentEntity.id, {
+      childId: childEntity.id,
+      childFlow: transition.spawnFlow,
+      spawnedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Log orphan so it can be manually cleaned up.
+    // The child entity is real and functional; only parent artifact bookkeeping failed.
+    console.error(
+      `[flow-spawner] ORPHAN child entity ${childEntity.id} (flow: ${transition.spawnFlow}) — ` +
+        `failed to register on parent ${parentEntity.id}: ${String(err)}`,
+    );
+  }
+  return childEntity;
 }
