@@ -16,6 +16,13 @@ export const FlowDefinitionSchema = z.object({
   createdBy: z.string().optional(),
   discipline: z.string().min(1),
   defaultModelTier: z.string().min(1).optional(),
+  timeoutPrompt: z
+    .string()
+    .min(1)
+    .refine((val) => validateTemplate(val), {
+      message: "timeoutPrompt contains disallowed Handlebars expressions",
+    })
+    .optional(),
 });
 
 export const OnEnterSchema = z.object({
@@ -50,7 +57,7 @@ const BaseGateSchema = z.object({
   name: z.string().min(1),
   timeoutMs: z.number().int().min(0).optional().default(30000),
   failurePrompt: z.string().optional(),
-  timeoutPrompt: z.string().optional(),
+  timeoutPrompt: z.string().min(1).optional(),
 });
 
 export const CommandGateSchema = BaseGateSchema.extend({

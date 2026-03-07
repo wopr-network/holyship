@@ -96,6 +96,7 @@ async function parseSeedAndLoad(
         createdBy: f.createdBy,
         discipline: f.discipline,
         defaultModelTier: f.defaultModelTier,
+        timeoutPrompt: f.timeoutPrompt,
       });
 
       const flowStates = parsed.states.filter((s) => s.flowName === f.name);

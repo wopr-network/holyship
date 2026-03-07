@@ -138,6 +138,7 @@ export interface Flow {
   createdBy: string | null;
   discipline: string | null;
   defaultModelTier: string | null;
+  timeoutPrompt: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
   states: State[];
@@ -167,6 +168,7 @@ export interface CreateFlowInput {
   createdBy?: string;
   discipline?: string;
   defaultModelTier?: string;
+  timeoutPrompt?: string;
 }
 
 /** Input for adding a state to a flow */

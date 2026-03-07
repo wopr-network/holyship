@@ -9,9 +9,11 @@ import type {
   IInvocationRepository,
   ITransitionLogRepository,
 } from "../repositories/interfaces.js";
+import { DEFAULT_TIMEOUT_PROMPT } from "./constants.js";
 import type { IEventBusAdapter } from "./event-types.js";
 import { executeSpawn } from "./flow-spawner.js";
 import { evaluateGate } from "./gate-evaluator.js";
+import { getHandlebars } from "./handlebars.js";
 import { buildInvocation } from "./invocation-builder.js";
 import { executeOnEnter } from "./on-enter.js";
 import { findTransition, isTerminal } from "./state-machine.js";
@@ -131,13 +133,29 @@ export class Engine {
             emittedAt: new Date(),
           });
         }
+        let resolvedTimeoutPrompt: string | undefined;
+        if (gateResult.timedOut) {
+          const rawTemplate = gate.timeoutPrompt ?? flow.timeoutPrompt ?? DEFAULT_TIMEOUT_PROMPT;
+          try {
+            const hbs = getHandlebars();
+            const template = hbs.compile(rawTemplate);
+            resolvedTimeoutPrompt = template({
+              entity,
+              flow,
+              gate: { name: gate.name, output: gateResult.output },
+            });
+          } catch (err) {
+            console.error("[engine] Failed to render timeoutPrompt template:", err);
+            resolvedTimeoutPrompt = DEFAULT_TIMEOUT_PROMPT;
+          }
+        }
         return {
           gated: true,
           gateTimedOut: gateResult.timedOut,
           gateOutput: gateResult.output,
           gateName: gate.name,
           failurePrompt: gate.failurePrompt ?? undefined,
-          timeoutPrompt: gate.timeoutPrompt ?? undefined,
+          timeoutPrompt: resolvedTimeoutPrompt,
           gatesPassed,
           terminal: false,
         };
