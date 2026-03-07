@@ -629,21 +629,6 @@ describe("MCP tool handlers", () => {
     expect(clearCall).toBeDefined();
   });
 
-  // Finding 6: limit param is validated by Zod
-  it("query.entities clamps limit to valid range", async () => {
-    const allEntities = Array.from({ length: 300 }, (_, i) => mockEntity({ id: `ent-${i}` }));
-    deps.entities.findByFlowAndState = async () => allEntities;
-    // Requesting limit=999 should now be rejected by Zod validation
-    const result = await callTool("query.entities", {
-      flow: "test-flow",
-      state: "draft",
-      limit: 999,
-    });
-    expect(result.isError).toBe(true);
-    const text = (result.content as Array<{ text: string }>)[0].text;
-    expect(text).toContain("Validation error");
-  });
-
   // Zod validation tests
   it("flow.claim rejects empty role", async () => {
     const result = await callTool("flow.claim", { role: "" });

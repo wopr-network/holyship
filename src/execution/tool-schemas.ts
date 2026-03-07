@@ -27,7 +27,7 @@ export const QueryEntitySchema = z.object({
 export const QueryEntitiesSchema = z.object({
   flow: z.string().min(1),
   state: z.string().min(1),
-  limit: z.number().int().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
 export const QueryInvocationsSchema = z.object({
