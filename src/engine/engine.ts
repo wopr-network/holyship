@@ -284,9 +284,11 @@ export class Engine {
     let flows: Flow[];
     if (flowName) {
       const flow = await this.flowRepo.getByName(flowName);
-      flows = flow ? [flow] : [];
+      // Validate discipline match — if discipline doesn't match, no work available
+      flows = flow && flow.discipline === role ? [flow] : [];
     } else {
-      flows = await this.flowRepo.listAll();
+      const allFlows = await this.flowRepo.listAll();
+      flows = allFlows.filter((f) => f.discipline === role);
     }
 
     for (const flow of flows) {

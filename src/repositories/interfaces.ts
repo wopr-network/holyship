@@ -19,6 +19,7 @@ export interface Entity {
   claimedBy: string | null;
   claimedAt: Date | null;
   flowVersion: number;
+  priority: number;
   createdAt: Date;
   updatedAt: Date;
   affinityWorkerId: string | null;
@@ -127,6 +128,7 @@ export interface Flow {
   affinityWindowMs: number;
   version: number;
   createdBy: string | null;
+  discipline: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
   states: State[];
@@ -154,6 +156,7 @@ export interface CreateFlowInput {
   maxConcurrentPerRepo?: number;
   affinityWindowMs?: number;
   createdBy?: string;
+  discipline?: string;
 }
 
 /** Input for adding a state to a flow */
@@ -310,6 +313,9 @@ export interface IInvocationRepository {
 
   /** Find unclaimed invocations where the entity has unexpired affinity for the given worker and role. */
   findUnclaimedWithAffinity(flowId: string, role: string, workerId: string): Promise<Invocation[]>;
+
+  /** Find all unclaimed invocations in a flow, regardless of agentRole. For discipline-based claiming. */
+  findUnclaimedByFlow(flowId: string): Promise<Invocation[]>;
 
   /** Find all invocations for a given flow (across all entities). */
   findByFlow(flowId: string): Promise<Invocation[]>;

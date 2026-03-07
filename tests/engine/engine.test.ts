@@ -20,7 +20,7 @@ function makeEntity(overrides: Partial<Entity> = {}): Entity {
   return {
     id: "ent-1", flowId: "flow-1", state: "open",
     refs: null, artifacts: null, claimedBy: null, claimedAt: null,
-    flowVersion: 1, createdAt: new Date(), updatedAt: new Date(),
+    flowVersion: 1, priority: 0, createdAt: new Date(), updatedAt: new Date(),
     affinityWorkerId: null, affinityRole: null, affinityExpiresAt: null,
     ...overrides,
   };
@@ -39,7 +39,7 @@ function makeFlow(overrides: Partial<Flow> = {}): Flow {
   return {
     id: "flow-1", name: "test-flow", description: null, entitySchema: null,
     initialState: "open", maxConcurrent: 0, maxConcurrentPerRepo: 0, affinityWindowMs: 300000,
-    version: 1, createdBy: null, createdAt: null, updatedAt: null,
+    version: 1, createdBy: null, discipline: "coder", createdAt: null, updatedAt: null,
     states: [
       makeState({ name: "open", agentRole: "planner", promptTemplate: "Plan" }),
       makeState({ name: "coding", agentRole: "coder", promptTemplate: "Code" }),

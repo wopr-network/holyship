@@ -174,6 +174,23 @@ export class DrizzleInvocationRepository implements IInvocationRepository {
     return rows.map((r) => toInvocation(r.inv));
   }
 
+  async findUnclaimedByFlow(flowId: string): Promise<Invocation[]> {
+    const rows = this.db
+      .select({ inv: invocations })
+      .from(invocations)
+      .innerJoin(entities, eq(invocations.entityId, entities.id))
+      .where(
+        and(
+          eq(entities.flowId, flowId),
+          isNull(invocations.claimedBy),
+          isNull(invocations.completedAt),
+          isNull(invocations.failedAt),
+        ),
+      )
+      .all();
+    return rows.map((r) => toInvocation(r.inv));
+  }
+
   async findByFlow(flowId: string): Promise<Invocation[]> {
     const rows = this.db
       .select({ inv: invocations })

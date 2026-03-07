@@ -19,6 +19,7 @@ export class DrizzleEntityRepository implements IEntityRepository {
       claimedBy: row.claimedBy,
       claimedAt: row.claimedAt ? new Date(row.claimedAt) : null,
       flowVersion: row.flowVersion ?? 1,
+      priority: row.priority ?? 0,
       createdAt: new Date(row.createdAt ?? 0),
       updatedAt: new Date(row.updatedAt ?? 0),
       affinityWorkerId: row.affinityWorkerId ?? null,
