@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b5ebb4f7-0d0f-49cf-8ef6-a72529fd38d7",
+  "id": "7d30568f-4f70-4713-9f4b-ed86afc97897",
   "prevId": "a758b00f-5fdf-44ab-bc75-d2b56a13a240",
   "tables": {
     "entities": {
@@ -389,6 +389,13 @@
         },
         "discipline": {
           "name": "discipline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timeout_prompt": {
+          "name": "timeout_prompt",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -873,13 +880,6 @@
         },
         "constraints": {
           "name": "constraints",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "on_enter": {
-          "name": "on_enter",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
