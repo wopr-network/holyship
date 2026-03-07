@@ -64,6 +64,7 @@ const TOOL_DEFINITIONS = [
       properties: {
         role: { type: "string", description: "Agent role to claim work for" },
         flow: { type: "string", description: "Optional flow name to filter by" },
+        worker_id: { type: "string", description: "Optional stable worker identifier for affinity routing" },
       },
       required: ["role"],
     },
@@ -96,6 +97,7 @@ const TOOL_DEFINITIONS = [
           description: "Completion signal (matches transition trigger)",
         },
         artifacts: { type: "object", description: "Optional artifacts to attach" },
+        worker_id: { type: "string", description: "Optional stable worker identifier for affinity routing" },
       },
       required: ["entity_id", "signal"],
     },
@@ -445,6 +447,7 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
     // No flow specified — search all flows for a claimable entity with this role
     const allFlows = await deps.flows.list();
     for (const flow of allFlows) {
+      candidates = [];
       if (workerId) {
         candidates = await deps.invocations.findUnclaimedWithAffinity(flow.id, role, workerId);
       }
@@ -534,21 +537,6 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
   // concurrency check inside the engine doesn't count it as still-active.
   await deps.invocations.complete(activeInvocation.id, signal, artifacts);
 
-  // Set affinity on completion for passive-mode invocations
-  if (workerId && activeInvocation.mode === "passive") {
-    const entity = await deps.entities.get(entityId);
-    if (entity) {
-      const flow = await deps.flows.get(entity.flowId);
-      const windowMs = flow?.affinityWindowMs ?? 300000;
-      await deps.entities.setAffinity(
-        entityId,
-        workerId,
-        activeInvocation.agentRole ?? "",
-        new Date(Date.now() + windowMs),
-      );
-    }
-  }
-
   // Delegate to the engine — it handles gate evaluation, transition, event
   // emission, invocation creation, concurrency checks, and spawn logic.
   let result: Awaited<ReturnType<typeof deps.engine.processSignal>>;
@@ -566,6 +554,16 @@ async function handleFlowReport(deps: McpServerDeps, args: Record<string, unknow
       activeInvocation.agentRole ?? undefined,
     );
     return errorResult(message);
+  }
+
+  // Set affinity on completion for passive-mode invocations, after processSignal succeeds
+  if (workerId && activeInvocation.mode === "passive" && activeInvocation.agentRole) {
+    const entity = await deps.entities.get(entityId);
+    if (entity) {
+      const flow = await deps.flows.get(entity.flowId);
+      const windowMs = flow?.affinityWindowMs ?? 300000;
+      await deps.entities.setAffinity(entityId, workerId, activeInvocation.agentRole, new Date(Date.now() + windowMs));
+    }
   }
 
   // Gate blocked — create a replacement unclaimed invocation so the entity
