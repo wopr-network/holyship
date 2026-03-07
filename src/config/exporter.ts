@@ -9,9 +9,11 @@ export async function exportSeed(flowRepo: IFlowRepository, gateRepo: IGateRepos
   const gateIdToName = new Map<string, string>(allGates.map((g) => [g.id, g.name]));
   const gateById = new Map(allGates.map((g) => [g.id, g]));
 
-  // Collect gate IDs referenced by transitions
+  const exportedFlows = flows.filter((f) => f.discipline !== null);
+
+  // Collect gate IDs referenced by transitions of exported flows only
   const referencedGateIds = new Set<string>();
-  for (const flow of flows) {
+  for (const flow of exportedFlows) {
     for (const t of flow.transitions) {
       if (t.gateId) referencedGateIds.add(t.gateId);
     }
@@ -31,22 +33,20 @@ export async function exportSeed(flowRepo: IFlowRepository, gateRepo: IGateRepos
     }
   }
 
-  const seedFlows: SeedFile["flows"] = flows
-    .filter((f) => f.discipline !== null)
-    .map((f) => ({
-      name: f.name,
-      description: f.description ?? undefined,
-      entitySchema: f.entitySchema ?? undefined,
-      initialState: f.initialState,
-      maxConcurrent: f.maxConcurrent,
-      maxConcurrentPerRepo: f.maxConcurrentPerRepo,
-      affinityWindowMs: f.affinityWindowMs,
-      version: f.version,
-      createdBy: f.createdBy ?? undefined,
-      discipline: f.discipline as string,
-    }));
+  const seedFlows: SeedFile["flows"] = exportedFlows.map((f) => ({
+    name: f.name,
+    description: f.description ?? undefined,
+    entitySchema: f.entitySchema ?? undefined,
+    initialState: f.initialState,
+    maxConcurrent: f.maxConcurrent,
+    maxConcurrentPerRepo: f.maxConcurrentPerRepo,
+    affinityWindowMs: f.affinityWindowMs,
+    version: f.version,
+    createdBy: f.createdBy ?? undefined,
+    discipline: f.discipline as string,
+  }));
 
-  const seedStates: SeedFile["states"] = flows.flatMap((f) =>
+  const seedStates: SeedFile["states"] = exportedFlows.flatMap((f) =>
     f.states.map((s) => ({
       name: s.name,
       flowName: f.name,
@@ -57,7 +57,7 @@ export async function exportSeed(flowRepo: IFlowRepository, gateRepo: IGateRepos
     })),
   );
 
-  const seedTransitions: SeedFile["transitions"] = flows.flatMap((f) =>
+  const seedTransitions: SeedFile["transitions"] = exportedFlows.flatMap((f) =>
     f.transitions.map((t) => ({
       flowName: f.name,
       fromState: t.fromState,
