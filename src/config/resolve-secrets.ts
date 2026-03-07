@@ -14,7 +14,10 @@ function resolveValue(value: unknown): unknown {
   if (typeof value === "string") {
     return resolveString(value);
   }
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveValue(item));
+  }
+  if (typeof value === "object" && value !== null) {
     return resolveRecord(value as Record<string, unknown>);
   }
   return value;

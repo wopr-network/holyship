@@ -269,7 +269,13 @@ program
     // Resolve AI adapter from integration config or env
     const configs = await integrationConfigRepo.listAll();
     const aiConfig = configs.find((c) => c.capability === "ai-provider");
-    const resolvedAiConfig = resolveConfigSecrets((aiConfig?.config as Record<string, unknown>) ?? null);
+    let resolvedAiConfig: Record<string, unknown> | null;
+    try {
+      resolvedAiConfig = resolveConfigSecrets((aiConfig?.config as Record<string, unknown>) ?? null);
+    } catch (err) {
+      sqlite.close();
+      throw err;
+    }
     const apiKey = (resolvedAiConfig as { apiKey?: string } | null)?.apiKey ?? process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
@@ -427,7 +433,13 @@ program
     // Get Linear config
     const configs = await integrationConfigRepo.listAll();
     const linearConfig = configs.find((c) => c.adapter === "linear");
-    const resolvedLinearConfig = resolveConfigSecrets((linearConfig?.config as Record<string, unknown>) ?? null);
+    let resolvedLinearConfig: Record<string, unknown> | null;
+    try {
+      resolvedLinearConfig = resolveConfigSecrets((linearConfig?.config as Record<string, unknown>) ?? null);
+    } catch (err) {
+      sqlite.close();
+      throw err;
+    }
     const apiKey = (resolvedLinearConfig as { apiKey?: string } | null)?.apiKey ?? process.env.LINEAR_API_KEY;
 
     if (!apiKey) {

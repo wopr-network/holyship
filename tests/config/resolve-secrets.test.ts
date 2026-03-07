@@ -36,7 +36,6 @@ describe("resolveConfigSecrets", () => {
   });
 
   it("throws when referenced env var is not set", () => {
-    delete process.env.MISSING_VAR;
     const config = { apiKey: "${MISSING_VAR}" };
     expect(() => resolveConfigSecrets(config)).toThrow(
       'Environment variable "MISSING_VAR" is not set (referenced in integration config)',
