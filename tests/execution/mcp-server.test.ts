@@ -144,6 +144,9 @@ function createMockDeps(): McpServerDeps {
     claimById: async (id) => mockEntity({ id, claimedBy: "agent-1" }),
     reapExpired: async () => [],
     release: async () => {},
+    setAffinity: async () => {},
+    clearExpiredAffinity: async () => [],
+    appendSpawnedChild: async () => {},
   };
 
   const flows: IFlowRepository = {
