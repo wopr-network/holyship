@@ -26,6 +26,9 @@ export function validateRepoName(name: string): string {
   if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
     throw new Error(`Invalid repo name: ${name}`);
   }
+  if (name === "." || name === "..") {
+    throw new Error(`Invalid repo name: ${name}`);
+  }
   return name;
 }
 
@@ -75,7 +78,9 @@ export function provisionWorktree(opts: {
         throw new Error(`Worktree at ${worktreePath} is on branch ${currentBranch}, expected ${branch}`);
       }
       const remoteUrl = run("git", ["remote", "get-url", "origin"], worktreePath);
-      if (!remoteUrl.includes(opts.repo)) {
+      const repoPath = opts.repo.replace(/\.git$/, "");
+      const urlMatchesRepo = remoteUrl.endsWith(`/${repoPath}`) || remoteUrl.endsWith(`/${repoPath}.git`);
+      if (!urlMatchesRepo) {
         throw new Error(
           `Worktree at ${worktreePath} has unexpected remote: ${remoteUrl} (expected to contain ${opts.repo})`,
         );

@@ -55,6 +55,12 @@ describe("provision-worktree helpers", () => {
     it("rejects slashes", () => {
       expect(() => validateRepoName("org/repo")).toThrow("Invalid repo name");
     });
+    it("rejects dot component", () => {
+      expect(() => validateRepoName(".")).toThrow("Invalid repo name");
+    });
+    it("rejects double-dot component", () => {
+      expect(() => validateRepoName("..")).toThrow("Invalid repo name");
+    });
   });
 
   describe("buildWorktreePath", () => {
@@ -105,6 +111,39 @@ describe("provisionWorktree idempotency remote URL check", () => {
 
     // Change the worktree's remote to a different repo
     execFileSync("git", ["remote", "set-url", "origin", "https://github.com/other-org/other-repo.git"], {
+      cwd: worktreePath,
+    });
+
+    expect(() =>
+      provisionWorktree({
+        repo: "wopr-network/defcon",
+        issueKey: "WOP-392",
+        basePath: join(tmpBase, "worktrees"),
+        cloneRoot,
+      }),
+    ).toThrow(/unexpected remote/);
+  });
+
+  it("throws when existing worktree remote is a prefix match but not an exact repo", () => {
+    // Set up a bare "origin" repo simulating a fork named defcon-fork
+    const originPath = join(tmpBase, "origin-fork.git");
+    execFileSync("git", ["init", "--bare", originPath]);
+
+    const cloneName = "defcon";
+    const clonePath = join(cloneRoot, cloneName);
+    execFileSync("git", ["clone", originPath, clonePath]);
+    execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: clonePath });
+    execFileSync("git", ["config", "user.name", "Test"], { cwd: clonePath });
+    execFileSync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: clonePath });
+    execFileSync("git", ["push", "origin", "HEAD"], { cwd: clonePath });
+
+    const branch = "agent/coder-392/wop-392";
+    const worktreePath = join(tmpBase, "worktrees", "wopr-defcon-coder-392");
+    mkdirSync(join(tmpBase, "worktrees"), { recursive: true });
+    execFileSync("git", ["worktree", "add", worktreePath, "-B", branch, "HEAD"], { cwd: clonePath });
+
+    // Set remote to a URL that contains "defcon" as a prefix (defcon-fork), not exact match
+    execFileSync("git", ["remote", "set-url", "origin", "https://github.com/wopr-network/defcon-fork.git"], {
       cwd: worktreePath,
     });
 
