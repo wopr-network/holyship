@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getHandlebars, registerHelper } from "../../src/engine/handlebars.js";
+import { validateTemplate } from "../../src/engine/handlebars.js";
 
 describe("getHandlebars", () => {
   it("returns a Handlebars instance with built-in helpers", () => {
@@ -65,5 +66,27 @@ describe("registerHelper", () => {
     const hbs = getHandlebars();
     const tpl = hbs.compile("{{double val}}");
     expect(tpl({ val: 7 })).toBe("14");
+  });
+});
+
+describe("compile injection guard", () => {
+  it("throws when template contains lookup helper", () => {
+    const hbs = getHandlebars();
+    expect(() => hbs.compile("{{lookup obj key}}")).toThrow();
+  });
+
+  it("throws when template contains @root", () => {
+    const hbs = getHandlebars();
+    expect(() => hbs.compile("{{@root.secret}}")).toThrow();
+  });
+
+  it("throws when template contains __proto__", () => {
+    const hbs = getHandlebars();
+    expect(() => hbs.compile("{{__proto__}}")).toThrow();
+  });
+
+  it("allows safe templates through compile", () => {
+    const hbs = getHandlebars();
+    expect(() => hbs.compile("Hello {{name}}")).not.toThrow();
   });
 });

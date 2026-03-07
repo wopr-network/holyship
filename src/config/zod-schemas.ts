@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { validateTemplate } from "../engine/handlebars.js";
 
 // ─── Leaf Schemas ───
 
@@ -19,7 +20,12 @@ export const StateDefinitionSchema = z.object({
   agentRole: z.string().optional(),
   modelTier: z.string().optional(),
   mode: z.enum(["passive", "active"]).optional().default("passive"),
-  promptTemplate: z.string().optional(),
+  promptTemplate: z
+    .string()
+    .refine((val) => validateTemplate(val), {
+      message: "promptTemplate contains disallowed Handlebars expressions",
+    })
+    .optional(),
   constraints: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -56,7 +62,12 @@ export const TransitionRuleSchema = z.object({
   toState: z.string().min(1),
   trigger: z.string().min(1),
   gateName: z.string().optional(),
-  condition: z.string().optional(),
+  condition: z
+    .string()
+    .refine((val) => validateTemplate(val), {
+      message: "condition contains disallowed Handlebars expressions",
+    })
+    .optional(),
   priority: z.number().int().min(0).optional().default(0),
   spawnFlow: z.string().optional(),
   spawnTemplate: z.string().optional(),
