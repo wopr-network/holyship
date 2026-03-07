@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, symlinkSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve, join } from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitHubCodeHostAdapter, MergeConflictError, PRNotFoundError, PathTraversalError } from "../../src/adapters/github.js";
 
@@ -234,6 +236,26 @@ describe("path validation", () => {
 
       expect(mockExec).toHaveBeenCalledTimes(1);
       expect(typeof result).toBe("string");
+    });
+
+    it("rejects a localRepoPath symlink inside REPOS_BASE that points outside", async () => {
+      // Create a temporary directory to act as REPOS_BASE
+      const tmpReposBase = mkdtempSync(join(tmpdir(), "repos-base-"));
+      // Create a symlink inside the base pointing to /tmp (outside)
+      const symlinkPath = join(tmpReposBase, "evil-repo");
+      symlinkSync(tmpdir(), symlinkPath);
+
+      const origReposBase = process.env.REPOS_BASE;
+      process.env.REPOS_BASE = tmpReposBase;
+      try {
+        await expect(
+          adapter.createWorktree(symlinkPath, "feat", "./worktrees/feat"),
+        ).rejects.toThrow(PathTraversalError);
+        expect(mockExec).not.toHaveBeenCalled();
+      } finally {
+        process.env.REPOS_BASE = origReposBase;
+        rmSync(tmpReposBase, { recursive: true, force: true });
+      }
     });
   });
 

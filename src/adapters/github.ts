@@ -177,7 +177,7 @@ export class GitHubCodeHostAdapter implements ICodeHostAdapter {
 
   async createWorktree(localRepoPath: string, branch: string, path: string): Promise<string> {
     const validatedPath = validatePath(path, getWorktreeBase(), "Worktree", false);
-    const validatedRepo = validatePath(localRepoPath, getReposBase(), "Repository", false);
+    const validatedRepo = validatePath(localRepoPath, getReposBase(), "Repository", true);
     await this.git(["-C", validatedRepo, "worktree", "add", "-b", branch, validatedPath]);
     return validatedPath;
   }
