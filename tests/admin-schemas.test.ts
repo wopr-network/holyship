@@ -61,7 +61,7 @@ describe("admin-schemas", () => {
     const result = AdminGateCreateSchema.safeParse({
       name: "fn-check",
       type: "function",
-      functionRef: "myModule.check",
+      functionRef: "myModule:check",
     });
     expect(result.success).toBe(true);
   });
