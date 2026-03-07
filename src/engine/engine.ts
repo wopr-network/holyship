@@ -370,7 +370,7 @@ export class Engine {
   }
 
   startReaper(intervalMs: number, entityTtlMs: number = 60_000): () => Promise<void> {
-    let inFlightTick: Promise<void> = Promise.resolve();
+    let tickInFlight = false;
     let stopped = false;
 
     const tick = async () => {
@@ -387,18 +387,20 @@ export class Engine {
     };
 
     const timer = setInterval(() => {
-      if (stopped) return;
-      inFlightTick = (inFlightTick ?? Promise.resolve())
-        .then(() => (stopped ? undefined : tick()))
+      if (stopped || tickInFlight) return;
+      tickInFlight = true;
+      tick()
         .catch((err) => {
           console.error("[reaper] error:", err);
+        })
+        .finally(() => {
+          tickInFlight = false;
         });
     }, intervalMs);
 
     return async () => {
       stopped = true;
       clearInterval(timer);
-      await inFlightTick;
     };
   }
 

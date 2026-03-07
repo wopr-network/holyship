@@ -591,57 +591,65 @@ describe("Engine", () => {
 
   describe("startReaper", () => {
     it("calls reapExpired on repos periodically", async () => {
-      const mocks = makeMockRepos();
-      const engine = new Engine({ ...mocks, adapters: new Map() });
+      vi.useFakeTimers();
+      try {
+        const mocks = makeMockRepos();
+        const engine = new Engine({ ...mocks, adapters: new Map() });
 
-      const stop = engine.startReaper(50);
-      await new Promise((r) => setTimeout(r, 120));
-      stop();
+        const stop = engine.startReaper(50);
+        await vi.advanceTimersByTimeAsync(120);
+        await stop();
 
-      expect(mocks.invocationRepo.reapExpired).toHaveBeenCalled();
-      expect(mocks.entityRepo.reapExpired).toHaveBeenCalled();
+        expect(mocks.invocationRepo.reapExpired).toHaveBeenCalled();
+        expect(mocks.entityRepo.reapExpired).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("does not crash the process when reaper callback throws", async () => {
-      const mocks = makeMockRepos();
-      (mocks.invocationRepo.reapExpired as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("db error"));
-      const engine = new Engine({ ...mocks, adapters: new Map() });
+      vi.useFakeTimers();
+      try {
+        const mocks = makeMockRepos();
+        (mocks.invocationRepo.reapExpired as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("db error"));
+        const engine = new Engine({ ...mocks, adapters: new Map() });
 
-      const stop = engine.startReaper(50);
-      // Wait long enough for the timer to fire at least once
-      await new Promise((r) => setTimeout(r, 120));
-      stop();
+        const stop = engine.startReaper(50);
+        await vi.advanceTimersByTimeAsync(120);
+        await stop();
 
-      // If we reach here without an unhandled rejection crash, the test passes
-      expect(true).toBe(true);
+        // If we reach here without an unhandled rejection crash, the test passes
+        expect(true).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
-    it("stopReaper drains all in-flight ticks before returning (no overwrite)", async () => {
-      const mocks = makeMockRepos();
-      let ticksCompleted = 0;
+    it("stop() prevents new ticks from starting after it is called", async () => {
+      vi.useFakeTimers();
+      try {
+        const mocks = makeMockRepos();
+        let ticksStarted = 0;
+        (mocks.invocationRepo.reapExpired as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+          ticksStarted++;
+          return [];
+        });
 
-      // Make each tick take 80ms — longer than the 30ms interval so ticks overlap
-      (mocks.invocationRepo.reapExpired as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-        await new Promise((r) => setTimeout(r, 80));
-        ticksCompleted++;
-        return [];
-      });
+        const engine = new Engine({ ...mocks, adapters: new Map() });
+        const stop = engine.startReaper(30);
 
-      const engine = new Engine({ ...mocks, adapters: new Map() });
-      const stop = engine.startReaper(30);
+        // Advance enough for a few ticks
+        await vi.advanceTimersByTimeAsync(100);
+        await stop();
 
-      // Wait for at least 3 intervals to fire (90ms) so multiple ticks are queued
-      await new Promise((r) => setTimeout(r, 100));
-
-      // stop() must await the full chain — all queued ticks complete before stop resolves
-      await stop();
-
-      // All ticks that were queued before stop() must have completed
-      expect(ticksCompleted).toBeGreaterThanOrEqual(1);
-      // Verify no tick ran after stop() resolved (no orphaned work)
-      const countAtStop = ticksCompleted;
-      await new Promise((r) => setTimeout(r, 100));
-      expect(ticksCompleted).toBe(countAtStop);
+        // Record count after stop — no further ticks should start
+        const countAtStop = ticksStarted;
+        await vi.advanceTimersByTimeAsync(100);
+        expect(ticksStarted).toBe(countAtStop);
+        expect(countAtStop).toBeGreaterThanOrEqual(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
