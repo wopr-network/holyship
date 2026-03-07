@@ -31,6 +31,20 @@ export function resolveGateTimeout(
   return getSystemDefaultGateTimeout();
 }
 
+function getSystemDefaultGateTimeout(): number {
+  const envVal = Number(process.env.DEFCON_DEFAULT_GATE_TIMEOUT_MS);
+  return envVal > 0 ? envVal : 300000;
+}
+
+export function resolveGateTimeout(
+  gateTimeoutMs: number | undefined,
+  flowGateTimeoutMs: number | null | undefined,
+): number {
+  if (gateTimeoutMs != null && gateTimeoutMs > 0) return gateTimeoutMs;
+  if (flowGateTimeoutMs != null && flowGateTimeoutMs > 0) return flowGateTimeoutMs;
+  return getSystemDefaultGateTimeout();
+}
+
 /**
  * Evaluate a gate against an entity. Records the result in gateRepo.
  * Supports "command", "function", and "api" gate types.
