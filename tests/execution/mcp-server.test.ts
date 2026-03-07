@@ -308,11 +308,12 @@ describe("MCP tool handlers", () => {
     return result;
   }
 
-  it("lists all 18 tools", async () => {
+  it("lists all 19 tools", async () => {
     const result = await listTools();
-    expect(result.tools).toHaveLength(18);
+    expect(result.tools).toHaveLength(19);
     const names = result.tools.map((t: { name: string }) => t.name).sort();
     expect(names).toEqual([
+      "admin.entity.create",
       "admin.flow.create",
       "admin.flow.restore",
       "admin.flow.snapshot",
@@ -1142,5 +1143,94 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
     const data = parseResult(result as { content: Array<{ text: string }> });
     expect(data.next_action).toBe("check_back");
     expect(data.retry_after_ms).toBe(30000);
+  });
+});
+
+describe("admin.entity.create", () => {
+  let deps: McpServerDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it("creates an entity via engine.createEntity", async () => {
+    const createdEntity = mockEntity({ id: "ent-new", state: "draft" });
+    const mockEngine = {
+      createEntity: async () => createdEntity,
+    } as unknown as Engine;
+
+    const testDeps: McpServerDeps = { ...deps, engine: mockEngine };
+    const { callToolHandler } = await import("../../src/execution/mcp-server.js");
+    const result = await callToolHandler(testDeps, "admin.entity.create", { flow: "test-flow" });
+
+    expect(result.isError).toBeUndefined();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.id).toBe("ent-new");
+    expect(data.flowId).toBe(createdEntity.flowId);
+    expect(data.state).toBe("draft");
+    // invocation_id included when an active invocation exists
+    expect(data.invocation_id).toBe("inv-1");
+  });
+
+  it("passes refs to engine.createEntity", async () => {
+    const createdEntity = mockEntity({ id: "ent-ref", state: "draft" });
+    const refs = { linear: { adapter: "linear", id: "WOP-123" } };
+    let capturedRefs: unknown;
+    const mockEngine = {
+      createEntity: async (_flowName: string, r: unknown) => {
+        capturedRefs = r;
+        return createdEntity;
+      },
+    } as unknown as Engine;
+
+    const testDeps: McpServerDeps = { ...deps, engine: mockEngine };
+    const { callToolHandler } = await import("../../src/execution/mcp-server.js");
+    const result = await callToolHandler(testDeps, "admin.entity.create", { flow: "test-flow", refs });
+
+    expect(result.isError).toBeUndefined();
+    expect(capturedRefs).toEqual(refs);
+  });
+
+  it("returns error when engine is not available", async () => {
+    const testDeps: McpServerDeps = { ...deps, engine: undefined };
+    const { callToolHandler } = await import("../../src/execution/mcp-server.js");
+    const result = await callToolHandler(testDeps, "admin.entity.create", { flow: "test-flow" });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Engine not available");
+  });
+
+  it("returns error when flow does not exist", async () => {
+    const mockEngine = {
+      createEntity: async () => { throw new Error('Flow "nope" not found'); },
+    } as unknown as Engine;
+
+    const testDeps: McpServerDeps = { ...deps, engine: mockEngine };
+    const { callToolHandler } = await import("../../src/execution/mcp-server.js");
+    const result = await callToolHandler(testDeps, "admin.entity.create", { flow: "nope" });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not found");
+  });
+
+  it("returns validation error when flow is missing", async () => {
+    const { callToolHandler } = await import("../../src/execution/mcp-server.js");
+    const result = await callToolHandler(deps, "admin.entity.create", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Validation error");
+  });
+
+  it("requires admin token when configured", async () => {
+    const { callToolHandler } = await import("../../src/execution/mcp-server.js");
+    const result = await callToolHandler(
+      deps,
+      "admin.entity.create",
+      { flow: "test-flow" },
+      { adminToken: "secret-token", callerToken: "wrong-token" },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Unauthorized");
   });
 });

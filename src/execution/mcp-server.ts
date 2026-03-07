@@ -29,6 +29,7 @@ import {
   FlowFailSchema,
   FlowGetPromptSchema,
   FlowReportSchema,
+  FlowSeedSchema,
   QueryEntitiesSchema,
   QueryEntitySchema,
   QueryFlowSchema,
@@ -331,6 +332,34 @@ const TOOL_DEFINITIONS = [
       required: ["flow_name", "version"],
     },
   },
+  {
+    name: "admin.entity.create",
+    description:
+      "Create a new entity in a flow (seed). Equivalent to POST /api/entities. " +
+      "Creates the entity at the flow's initial state and generates the first invocation if the initial state has an agent role. " +
+      "Returns the full Entity object plus an optional invocation_id if the initial state created an invocation.",
+    // inputSchema mirrors FlowSeedSchema in src/execution/tool-schemas.ts — keep in sync
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        flow: { type: "string", description: "Flow name to create the entity in" },
+        refs: {
+          type: "object",
+          description:
+            "Optional external references. Keys are ref names, values are objects with at least { adapter: string, id: string }",
+          additionalProperties: {
+            type: "object",
+            properties: {
+              adapter: { type: "string" },
+              id: { type: "string" },
+            },
+            required: ["adapter", "id"],
+          },
+        },
+      },
+      required: ["flow"],
+    },
+  },
 ];
 
 export function createMcpServer(deps: McpServerDeps, opts?: McpServerOpts): Server {
@@ -404,6 +433,8 @@ export async function callToolHandler(
         return await handleAdminFlowSnapshot(deps, safeArgs);
       case "admin.flow.restore":
         return await handleAdminFlowRestore(deps, safeArgs);
+      case "admin.entity.create":
+        return await handleAdminEntityCreate(deps, safeArgs);
       default:
         return errorResult(`Unknown tool: ${name}`);
     }
@@ -783,6 +814,25 @@ async function handleQueryFlow(deps: McpServerDeps, args: Record<string, unknown
   if (!flow) return errorResult(`Flow not found: ${name}`);
 
   return jsonResult(flow);
+}
+
+async function handleAdminEntityCreate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(FlowSeedSchema, args);
+  if (!v.ok) return v.result;
+  const { flow: flowName, refs } = v.data;
+
+  if (!deps.engine) {
+    return errorResult("Engine not available — MCP server started without engine dependency");
+  }
+
+  const entity = await deps.engine.createEntity(flowName, refs);
+  const invocations = await deps.invocations.findByEntity(entity.id);
+  const activeInvocation = invocations.find((inv) => !inv.completedAt && !inv.failedAt);
+  const result: Record<string, unknown> = { ...entity };
+  if (activeInvocation) {
+    result.invocation_id = activeInvocation.id;
+  }
+  return jsonResult(result);
 }
 
 /** Start the MCP server on stdio transport. */
