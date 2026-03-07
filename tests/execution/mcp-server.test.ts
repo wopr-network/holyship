@@ -1107,6 +1107,27 @@ describe("flow.claim discipline routing (WOP-1890)", () => {
     expect(data.retry_after_ms).toBe(30000);
   });
 
+  it("returns check_back with 300s retry when all entities are in terminal states (agentRole=null)", async () => {
+    // Flow has a "done" state with agentRole=null. All entities are in that terminal state.
+    // hasAnyInFlowAndState should only be called with claimable state names, not "done".
+    // If terminal states were included, hasAnyInFlowAndState would return true → wrongly 30s retry.
+    const flow1 = mockFlow({ id: "flow-1", name: "test-flow", discipline: null });
+    deps.flows.list = async () => [flow1];
+    deps.flows.listAll = async () => [flow1];
+    deps.invocations.findUnclaimedByFlow = async () => [];
+    deps.entities.findByFlowAndState = async () => [];
+    // hasAnyInFlowAndState returns true only if "done" (terminal) is passed — should NOT be called with it
+    deps.entities.hasAnyInFlowAndState = async (_flowId, stateNames) => {
+      if (stateNames.includes("done")) return true; // would trigger wrong 30s if terminal states leak through
+      return false;
+    };
+
+    const result = await callClaim({ workerId: "wkr_test", role: "coder" });
+    const data = parseResult(result as { content: Array<{ text: string }> });
+    expect(data.next_action).toBe("check_back");
+    expect(data.retry_after_ms).toBe(300000); // 300s = empty backlog, not 30s
+  });
+
   it("returns check_back with 30s retry when discipline-filtered flow has entities but discipline !== agentRole", async () => {
     // discipline "engineering" matches the flow; state.agentRole is "coder" (different from discipline)
     // The old code filtered states by agentRole === role, wrongly excluding all states → 300s
