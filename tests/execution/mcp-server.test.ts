@@ -141,6 +141,7 @@ function createMockDeps(): McpServerDeps {
     transition: async (_id, toState) => mockEntity({ state: toState }),
     updateArtifacts: async () => {},
     claim: async () => mockEntity({ claimedBy: "agent-1" }),
+    claimById: async (id) => mockEntity({ id, claimedBy: "agent-1" }),
     reapExpired: async () => [],
     release: async () => {},
   };

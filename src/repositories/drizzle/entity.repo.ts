@@ -133,10 +133,10 @@ export class DrizzleEntityRepository implements IEntityRepository {
       .update(entities)
       .set({ claimedBy: agentId, claimedAt: now, updatedAt: now })
       .where(and(eq(entities.id, entityId), isNull(entities.claimedBy)))
-      .returning()
-      .all();
-    if (result.length === 0) return null;
-    return this.toEntity(result[0]);
+      .run();
+    if (result.changes === 0) return null;
+    const rows = this.db.select().from(entities).where(eq(entities.id, entityId)).limit(1).all();
+    return rows.length > 0 ? this.toEntity(rows[0]) : null;
   }
 
   async release(entityId: string, agentId: string): Promise<void> {

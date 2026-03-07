@@ -74,6 +74,7 @@ function makeMockRepos() {
     ),
     updateArtifacts: vi.fn().mockResolvedValue(undefined),
     claim: vi.fn().mockResolvedValue(null),
+    claimById: vi.fn().mockResolvedValue(null),
     release: vi.fn().mockResolvedValue(undefined),
     reapExpired: vi.fn().mockResolvedValue([]),
     setAffinity: vi.fn().mockResolvedValue(undefined),
