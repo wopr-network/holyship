@@ -39,10 +39,10 @@ describe("validateAdminToken", () => {
   });
 
   it("treats empty string admin token as unset (throws for HTTP)", () => {
-    // Note: cli.ts already converts "" to undefined via `|| undefined`
-    // This test documents that undefined triggers the guard
+    // cli.ts converts "" to undefined via `|| undefined` before calling validateAdminToken,
+    // but the function itself should also reject empty-string tokens from direct callers.
     expect(() =>
-      validateAdminToken({ adminToken: undefined, startHttp: true, transport: "stdio" }),
+      validateAdminToken({ adminToken: "", startHttp: true, transport: "stdio" }),
     ).toThrow("DEFCON_ADMIN_TOKEN");
   });
 });

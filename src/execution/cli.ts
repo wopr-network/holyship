@@ -45,8 +45,10 @@ export function validateAdminToken(opts: {
   startHttp: boolean;
   transport: string;
 }): void {
-  const networkActive = opts.startHttp || opts.transport === "sse";
-  if (networkActive && !opts.adminToken) {
+  const transport = opts.transport.toLowerCase().trim();
+  const token = opts.adminToken?.trim();
+  const networkActive = opts.startHttp || transport === "sse";
+  if (networkActive && !token) {
     throw new Error(
       "DEFCON_ADMIN_TOKEN must be set when using HTTP or SSE transport. " +
         "Admin tools are accessible over the network and require authentication. " +
@@ -54,6 +56,7 @@ export function validateAdminToken(opts: {
     );
   }
 }
+
 const MIGRATIONS_FOLDER = new URL("../../drizzle", import.meta.url).pathname;
 const REAPER_INTERVAL_DEFAULT = "30000"; // 30s
 const CLAIM_TTL_DEFAULT = "300000"; // 5min
@@ -214,6 +217,7 @@ program
       validateAdminToken({ adminToken, startHttp, transport: opts.transport });
     } catch (err: unknown) {
       console.error((err as Error).message);
+      await stopReaper();
       sqlite.close();
       process.exit(1);
     }
