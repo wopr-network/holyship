@@ -187,7 +187,8 @@ export class DrizzleEntityRepository implements IEntityRepository {
         affinityExpiresAt: expiresAt.getTime(),
         updatedAt: Date.now(),
       })
-      .where(eq(entities.id, entityId));
+      .where(eq(entities.id, entityId))
+      .run();
   }
 
   async clearExpiredAffinity(): Promise<string[]> {
