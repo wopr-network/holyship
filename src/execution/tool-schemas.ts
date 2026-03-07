@@ -40,3 +40,18 @@ export const QueryInvocationsSchema = z.object({
 export const QueryFlowSchema = z.object({
   name: z.string().min(1),
 });
+
+export const FlowSeedSchema = z.object({
+  flow: z.string().min(1),
+  refs: z
+    .record(
+      z.string(),
+      z
+        .object({
+          adapter: z.string().min(1),
+          id: z.string().min(1),
+        })
+        .passthrough(),
+    )
+    .optional(),
+});
