@@ -141,7 +141,7 @@ describe("Engine integration (in-memory SQLite)", () => {
 
     const gates = await ctx.gateRepo.listAll();
     const scoreGate = gates.find((g) => g.name === "score-check")!;
-    ctx.sqlite.prepare("UPDATE gate_definitions SET command = ? WHERE id = ?").run("gates/test-pass.sh", scoreGate.id);
+    await ctx.gateRepo.update(scoreGate.id, { command: "gates/test-pass.sh" });
 
     const r2 = await ctx.engine.processSignal(entity.id, "submit");
     expect(r2.gated).toBe(false);
