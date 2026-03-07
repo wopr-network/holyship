@@ -66,7 +66,7 @@ const TOOL_DEFINITIONS = [
         role: { type: "string", description: "Discipline role (e.g. engineering, devops, qa, security)" },
         flow: { type: "string", description: "Optional flow name to restrict claim to a single flow" },
       },
-      required: ["workerId", "role"],
+      required: ["role"],
     },
   },
   {
@@ -480,20 +480,22 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
   // 4. Check affinity for each entity
   const affinitySet = new Set<string>();
   const now = Date.now();
-  await Promise.all(
-    uniqueEntityIds.map(async (eid) => {
-      const invocations = await deps.invocations.findByEntity(eid);
-      const lastCompleted = invocations
-        .filter((inv) => inv.completedAt !== null && inv.claimedBy === workerId)
-        .sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0));
-      if (lastCompleted.length > 0) {
-        const elapsed = now - (lastCompleted[0].completedAt?.getTime() ?? 0);
-        if (elapsed < AFFINITY_WINDOW_MS) {
-          affinitySet.add(eid);
+  if (workerId) {
+    await Promise.all(
+      uniqueEntityIds.map(async (eid) => {
+        const invocations = await deps.invocations.findByEntity(eid);
+        const lastCompleted = invocations
+          .filter((inv) => inv.completedAt !== null && inv.claimedBy === workerId)
+          .sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0));
+        if (lastCompleted.length > 0) {
+          const elapsed = now - (lastCompleted[0].completedAt?.getTime() ?? 0);
+          if (elapsed < AFFINITY_WINDOW_MS) {
+            affinitySet.add(eid);
+          }
         }
-      }
-    }),
-  );
+      }),
+    );
+  }
 
   // 5. Sort candidates by priority algorithm
   allCandidates.sort((a, b) => {
@@ -523,7 +525,7 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
   for (const invocation of allCandidates) {
     let claimed: Awaited<ReturnType<typeof deps.invocations.claim>>;
     try {
-      claimed = await deps.invocations.claim(invocation.id, workerId);
+      claimed = await deps.invocations.claim(invocation.id, workerId ?? "");
     } catch (err) {
       console.error(`Failed to claim invocation ${invocation.id}:`, err);
       continue;
@@ -531,7 +533,7 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
     if (claimed) {
       const entity = entityMap.get(claimed.entityId);
       if (entity) {
-        const claimedEntity = await deps.entities.claimById(entity.id, workerId);
+        const claimedEntity = await deps.entities.claimById(entity.id, workerId ?? "");
         if (!claimedEntity) {
           // Race condition: another worker claimed this entity first.
           // Release the invocation claim so it doesn't become a zombie lock.

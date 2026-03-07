@@ -649,11 +649,9 @@ describe("MCP tool handlers", () => {
     expect(text).toContain("Validation error");
   });
 
-  it("flow.claim rejects missing workerId", async () => {
-    const result = await callTool("flow.claim", { role: "coder" });
-    expect(result.isError).toBe(true);
-    const text = (result.content as Array<{ text: string }>)[0].text;
-    expect(text).toContain("Validation error");
+  it("flow.claim accepts missing workerId (affinity is best-effort)", async () => {
+    const result = await callTool("flow.claim", { role: "coder", flow: "test-flow" });
+    expect(result.isError).toBeFalsy();
   });
 
   it("flow.get_prompt rejects missing entity_id", async () => {
