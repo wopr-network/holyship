@@ -9,8 +9,14 @@ export function resolveCorsOrigin(opts: { host: string; corsEnv: string | undefi
   const corsValue = opts.corsEnv?.trim() || undefined;
   const isLoopback = LOOPBACK_HOSTS.has(opts.host);
 
-  // If explicit origin provided, always use it (even on loopback)
+  // If explicit origin provided, validate and use it
   if (corsValue) {
+    if (!/^https?:\/\/[^/]+$/.test(corsValue)) {
+      throw new Error(
+        `DEFCON_CORS_ORIGIN must be a bare origin like https://app.example.com, not ${corsValue}. ` +
+          "Remove any path component or trailing slash.",
+      );
+    }
     return { origin: corsValue };
   }
 

@@ -204,9 +204,16 @@ export function createHttpServer(deps: HttpServerDeps): http.Server {
   // --- HTTP server ---
   const server = http.createServer(async (req, res) => {
     // CORS
-    res.setHeader("Access-Control-Allow-Origin", deps.corsOrigin ?? "http://localhost");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    const origin = req.headers.origin;
+    if (origin) {
+      const allowed = deps.corsOrigin ?? "http://localhost";
+      if (origin === allowed) {
+        res.setHeader("Vary", "Origin");
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      }
+    }
     if (req.method === "OPTIONS") {
       res.writeHead(204).end();
       return;

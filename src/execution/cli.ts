@@ -305,10 +305,10 @@ program
       }
       const allowedOriginPattern: RegExp | string | null = corsResult.origin
         ? corsResult.origin // exact string match
-        : /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/; // loopback default
+        : /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/; // loopback default
 
       const httpServer = http.createServer(async (req, res) => {
-        // CORS: restrict to localhost origins when bound to loopback; allow all when bound to non-loopback
+        // CORS: restrict to localhost origins when bound to loopback; require DEFCON_CORS_ORIGIN when bound to non-loopback
         const origin = req.headers.origin;
         if (origin) {
           const originAllowed =
