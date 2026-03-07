@@ -187,6 +187,10 @@ const TOOL_DEFINITIONS = [
         maxConcurrent: { type: "number", description: "Max concurrent entities (0=unlimited)" },
         maxConcurrentPerRepo: { type: "number", description: "Max concurrent per repo (0=unlimited)" },
         affinityWindowMs: { type: "number", description: "Worker affinity window duration in ms (default 300000)" },
+        gateTimeoutMs: {
+          type: "number",
+          description: "Default gate timeout in ms for all gates in this flow (default 300000)",
+        },
         createdBy: { type: "string", description: "Creator identifier" },
         states: {
           type: "array",
@@ -210,6 +214,7 @@ const TOOL_DEFINITIONS = [
         maxConcurrent: { type: "number" },
         maxConcurrentPerRepo: { type: "number" },
         affinityWindowMs: { type: "number", description: "Worker affinity window duration in ms (default 300000)" },
+        gateTimeoutMs: { type: "number", description: "Default gate timeout in ms for all gates in this flow" },
         initialState: { type: "string" },
       },
       required: ["flow_name"],

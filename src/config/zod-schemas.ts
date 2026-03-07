@@ -12,6 +12,7 @@ export const FlowDefinitionSchema = z.object({
   maxConcurrent: z.number().int().min(0).optional().default(0),
   maxConcurrentPerRepo: z.number().int().min(0).optional().default(0),
   affinityWindowMs: z.number().int().min(0).optional().default(300000),
+  gateTimeoutMs: z.number().int().min(0).optional(),
   version: z.number().int().min(1).optional().default(1),
   createdBy: z.string().optional(),
   discipline: z.string().min(1),

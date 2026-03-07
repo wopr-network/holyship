@@ -134,6 +134,7 @@ export interface Flow {
   maxConcurrent: number;
   maxConcurrentPerRepo: number;
   affinityWindowMs: number;
+  gateTimeoutMs: number | null;
   version: number;
   createdBy: string | null;
   discipline: string | null;
@@ -165,6 +166,7 @@ export interface CreateFlowInput {
   maxConcurrent?: number;
   maxConcurrentPerRepo?: number;
   affinityWindowMs?: number;
+  gateTimeoutMs?: number;
   createdBy?: string;
   discipline?: string;
   defaultModelTier?: string;

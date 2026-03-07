@@ -41,6 +41,7 @@ export async function exportSeed(flowRepo: IFlowRepository, gateRepo: IGateRepos
     maxConcurrent: f.maxConcurrent,
     maxConcurrentPerRepo: f.maxConcurrentPerRepo,
     affinityWindowMs: f.affinityWindowMs,
+    gateTimeoutMs: f.gateTimeoutMs ?? undefined,
     version: f.version,
     createdBy: f.createdBy ?? undefined,
     discipline: f.discipline as string,
