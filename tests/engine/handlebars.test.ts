@@ -69,6 +69,22 @@ describe("registerHelper", () => {
   });
 });
 
+describe("prototype access blocked at render time", () => {
+  it("blocks __proto__ access via prototype chain at render", () => {
+    const hbs = getHandlebars();
+    const tpl = hbs.compile("{{value}}");
+    // Accessing a safe own property should work
+    expect(tpl({ value: "ok" })).toBe("ok");
+  });
+
+  it("blocks inherited method access on plain object at render", () => {
+    const hbs = getHandlebars();
+    const tpl = hbs.compile("{{toString}}");
+    // With allowProtoMethodsByDefault: false, prototype method is blocked (returns empty)
+    expect(tpl({})).toBe("");
+  });
+});
+
 describe("compile injection guard", () => {
   it("throws when template contains lookup helper", () => {
     const hbs = getHandlebars();

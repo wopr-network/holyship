@@ -62,7 +62,7 @@ export const AdminTransitionCreateSchema = z.object({
   condition: safeTemplate.optional(),
   priority: z.number().int().min(0).optional(),
   spawnFlow: z.string().optional(),
-  spawnTemplate: z.string().optional(),
+  spawnTemplate: safeTemplate.optional(),
 });
 
 export const AdminTransitionUpdateSchema = z.object({
@@ -75,7 +75,7 @@ export const AdminTransitionUpdateSchema = z.object({
   condition: safeTemplate.nullable().optional(),
   priority: z.number().int().min(0).nullable().optional(),
   spawnFlow: z.string().nullable().optional(),
-  spawnTemplate: z.string().nullable().optional(),
+  spawnTemplate: safeTemplate.nullable().optional(),
 });
 
 export const AdminGateCreateSchema = z.discriminatedUnion("type", [

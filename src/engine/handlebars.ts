@@ -2,13 +2,15 @@ import Handlebars from "handlebars";
 
 const hbs = Handlebars.create();
 
-/** Compile options applied to every template for security.
- * noPrototypeAccess is a Handlebars 4.6+ runtime option not in @types/handlebars.
- */
-const SAFE_COMPILE_OPTIONS = {
-  noPrototypeAccess: true,
+const SAFE_COMPILE_OPTIONS: CompileOptions = {
   strict: true,
-} as CompileOptions;
+};
+
+/** Runtime options applied on every template render call to block prototype access. */
+const SAFE_RUNTIME_OPTIONS = {
+  allowProtoPropertiesByDefault: false,
+  allowProtoMethodsByDefault: false,
+};
 
 hbs.registerHelper("gt", (a: number, b: number) => (a > b ? "true" : ""));
 hbs.registerHelper("lt", (a: number, b: number) => (a < b ? "true" : ""));
@@ -43,13 +45,16 @@ export function validateTemplate(template: string): boolean {
   return !UNSAFE_PATTERN.test(template);
 }
 
-// Wrap compile to enforce safe options and injection checks on every call
+// Wrap compile to enforce safe options and injection checks on every call,
+// and wrap the returned template function to enforce runtime prototype access controls.
 const originalCompile = hbs.compile.bind(hbs);
 hbs.compile = ((template: string, options?: CompileOptions) => {
   if (!validateTemplate(template)) {
     throw new Error(`Template contains disallowed Handlebars expressions: ${template}`);
   }
-  return originalCompile(template, { ...options, ...SAFE_COMPILE_OPTIONS });
+  const compiled = originalCompile(template, { ...options, ...SAFE_COMPILE_OPTIONS });
+  return (context: unknown, runtimeOptions?: Handlebars.RuntimeOptions) =>
+    compiled(context, { ...SAFE_RUNTIME_OPTIONS, ...runtimeOptions });
 }) as typeof hbs.compile;
 
 /** Get the shared Handlebars instance with all built-in helpers. */
