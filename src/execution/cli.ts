@@ -88,7 +88,15 @@ program
     }
 
     const integrationRepo = new DrizzleIntegrationConfigRepository(db);
-    const result = await loadSeed(resolve(seedPath), flowRepo, gateRepo, integrationRepo, sqlite);
+    const seedRoot = process.env.DEFCON_SEED_ROOT;
+    const result = await loadSeed(
+      resolve(seedPath),
+      flowRepo,
+      gateRepo,
+      integrationRepo,
+      sqlite,
+      seedRoot ? { allowedRoot: seedRoot } : undefined,
+    );
     console.log(`Loaded seed: flows: ${result.flows}, gates: ${result.gates}, integrations: ${result.integrations}`);
     sqlite.close();
   });

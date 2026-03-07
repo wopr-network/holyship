@@ -23,7 +23,7 @@ export async function loadSeed(
   options?: LoadSeedOptions,
 ): Promise<LoadSeedResult> {
   const allowedRoot = options?.allowedRoot ?? process.cwd();
-  const resolvedRoot = realpathSync(allowedRoot);
+  const resolvedRoot = resolve(allowedRoot);
   const resolvedSeed = resolve(seedPath);
 
   if (!resolvedSeed.startsWith(`${resolvedRoot}/`) && resolvedSeed !== resolvedRoot) {
@@ -39,8 +39,15 @@ export async function loadSeed(
     return parseSeedAndLoad(raw, flowRepo, gateRepo, integrationRepo, sqlite);
   }
 
-  if (!realSeed.startsWith(`${resolvedRoot}/`) && realSeed !== resolvedRoot) {
-    throw new Error(`Seed path escapes allowed root: resolved symlink ${realSeed} is not under ${resolvedRoot}`);
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(resolvedRoot);
+  } catch {
+    realRoot = resolvedRoot;
+  }
+
+  if (!realSeed.startsWith(`${realRoot}/`) && realSeed !== realRoot) {
+    throw new Error(`Seed path escapes allowed root: resolved symlink ${realSeed} is not under ${realRoot}`);
   }
 
   const raw = readFileSync(realSeed, "utf-8");
