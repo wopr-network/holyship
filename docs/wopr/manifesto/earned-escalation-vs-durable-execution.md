@@ -1,10 +1,10 @@
-# Design Philosophy
+# Earned Escalation in the WOPR Stack
+
+See [method principle](../../method/manifesto/earned-escalation-vs-durable-execution.md)
 
 ## Why Not Temporal?
 
-You might be thinking: "This sounds like a workflow engine. Why not use Temporal?"
-
-Temporal is excellent. It's battle-tested, widely adopted, and built for durable execution of distributed systems. If you're orchestrating payment flows, order processing, or microservice choreography — use Temporal. Seriously.
+Temporal is excellent. It's battle-tested, widely adopted, and built for durable execution of distributed systems. If you're orchestrating payment flows, order processing, or microservice choreography — use Temporal.
 
 But Temporal's model is: write your workflow as deterministic code, and we'll replay event history to reconstruct state after failures. The workflow is code. The durability comes from the server. The platform runs as a cluster.
 
@@ -29,8 +29,8 @@ DEFCON is the escalation ladder. But a ladder needs someone to climb it and some
 **[NORAD](https://github.com/wopr-network/norad)** is the operations center. It watches the world for events, claims work from DEFCON, dispatches WOPR, and feeds signals back. It manages the floor — how many workers, what they're working on, routing results between the thing that does the work and the thing that decides if the work is good enough.
 
 ```text
-NORAD watches → event arrives → claims from DEFCON → dispatches WOPR
-WOPR works → emits signal → NORAD reports to DEFCON → gate checks → escalate or hold
+NORAD watches -> event arrives -> claims from DEFCON -> dispatches WOPR
+WOPR works -> emits signal -> NORAD reports to DEFCON -> gate checks -> escalate or hold
 ```
 
 WOPR doesn't know what DEFCON is. DEFCON doesn't know what WOPR is. NORAD connects them. Three systems, three roles, one metaphor that refuses to break down.

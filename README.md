@@ -249,7 +249,10 @@ Key method docs: [worker protocol](docs/method/pipeline/worker-protocol.md) · [
 
 ## Architecture & Design Philosophy
 
-For a detailed discussion of design decisions — including why DEFCON uses earned escalation instead of Temporal's durable execution, and how WOPR, DEFCON, and NORAD connect — see [docs/design-philosophy.md](docs/design-philosophy.md).
+For design decisions — including why DEFCON uses earned escalation instead of durable execution, and how WOPR, DEFCON, and NORAD connect:
+
+- [Earned escalation vs durable execution](docs/method/manifesto/earned-escalation-vs-durable-execution.md) — tool-agnostic principle
+- [WOPR implementation: why not Temporal, and the full stack](docs/wopr/manifesto/earned-escalation-vs-durable-execution.md) — concrete specifics
 
 ## Who This Is For
 
