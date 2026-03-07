@@ -2,5 +2,5 @@
 
 export type { ActiveRunnerDeps, ActiveRunnerRunOptions } from "./active-runner.js";
 export { ActiveRunner } from "./active-runner.js";
-export type { McpServerDeps } from "./mcp-server.js";
+export type { McpServerDeps, McpServerOpts } from "./mcp-server.js";
 export { createMcpServer, startStdioServer } from "./mcp-server.js";

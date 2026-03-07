@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 import { resolveSessionId, verifySessionToken } from "../../src/execution/cli.js";
 
 const CLI = join(import.meta.dirname, "../../src/execution/cli.ts");
@@ -183,15 +188,15 @@ describe("resolveSessionId", () => {
   });
 
   it("verifySessionToken returns true when stored token matches incoming token", () => {
-    expect(verifySessionToken("secret-token", "secret-token")).toBe(true);
+    expect(verifySessionToken(hashToken("secret-token"), "secret-token")).toBe(true);
   });
 
   it("verifySessionToken returns false when incoming token does not match stored token", () => {
-    expect(verifySessionToken("secret-token", "wrong-token")).toBe(false);
+    expect(verifySessionToken(hashToken("secret-token"), "wrong-token")).toBe(false);
   });
 
   it("verifySessionToken returns false when incoming token is absent but stored token exists", () => {
-    expect(verifySessionToken("secret-token", undefined)).toBe(false);
+    expect(verifySessionToken(hashToken("secret-token"), undefined)).toBe(false);
   });
 
   it("verifySessionToken returns true when no token was stored at handshake (unauthenticated session)", () => {

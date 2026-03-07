@@ -2,6 +2,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 import { Command } from "commander";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -183,7 +184,7 @@ program
 
       // Map session IDs to transports for POST routing
       const transports = new Map<string, InstanceType<typeof SSEServerTransport>>();
-      // Map session IDs to the bearer token used at SSE handshake (for per-request re-verification)
+      // Map session IDs to the SHA-256 hash of the bearer token used at SSE handshake
       const sessionTokens = new Map<string, string | undefined>();
 
       const httpServer = http.createServer(async (req, res) => {
@@ -191,7 +192,10 @@ program
           const callerToken = extractBearerToken(req.headers.authorization);
           const transport = new SSEServerTransport("/messages", res);
           transports.set(transport.sessionId, transport);
-          sessionTokens.set(transport.sessionId, callerToken);
+          sessionTokens.set(
+            transport.sessionId,
+            callerToken != null ? createHash("sha256").update(callerToken).digest("hex") : undefined,
+          );
           res.on("close", () => {
             transports.delete(transport.sessionId);
             sessionTokens.delete(transport.sessionId);
@@ -545,17 +549,18 @@ program
  *
  * Exported for unit testing.
  */
-export function verifySessionToken(storedToken: string | undefined, incomingToken: string | undefined): boolean {
-  if (!storedToken) {
+export function verifySessionToken(storedTokenHash: string | undefined, incomingToken: string | undefined): boolean {
+  if (!storedTokenHash) {
     // Session was established without a token; no per-request check needed.
     return true;
   }
   if (!incomingToken) {
     return false;
   }
-  const hashStored = createHash("sha256").update(storedToken).digest();
-  const hashIncoming = createHash("sha256").update(incomingToken).digest();
-  return timingSafeEqual(hashStored, hashIncoming);
+  const hashIncoming = createHash("sha256").update(incomingToken).digest("hex");
+  const storedBuf = Buffer.from(storedTokenHash, "hex");
+  const incomingBuf = Buffer.from(hashIncoming, "hex");
+  return timingSafeEqual(storedBuf, incomingBuf);
 }
 
 function extractBearerToken(header: string | undefined): string | undefined {
@@ -585,7 +590,7 @@ export function resolveSessionId(
 }
 
 // Only run when invoked as the main entry point, not when imported as a module
-const isMain = process.argv[1] != null && new URL(process.argv[1], "file:").href === import.meta.url;
+const isMain = process.argv[1] != null && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (isMain) {
   program.parseAsync(process.argv).catch((err) => {
     console.error(err instanceof Error ? err.message : String(err));
