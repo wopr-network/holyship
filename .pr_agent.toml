@@ -4,3 +4,7 @@ pr_commands = [
   "/review",
   "/improve",
 ]
+push_commands = [
+  "/review",
+  "/improve",
+]
