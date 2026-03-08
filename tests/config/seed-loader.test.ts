@@ -51,10 +51,10 @@ const tmpRoot = realpathSync(tmpdir());
 
 describe("loadSeed", () => {
   it("loads a valid seed file and creates all records", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const seedPath = writeSeedFile(validSeed);
 
-    const result = await loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot });
+    const result = await loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot });
 
     expect(result).toEqual({ flows: 1, gates: 1 });
 
@@ -74,24 +74,24 @@ describe("loadSeed", () => {
   });
 
   it("rejects invalid seed file with Zod errors", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const seedPath = writeSeedFile({ flows: [], states: [], transitions: [] });
 
-    await expect(loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot })).rejects.toThrow();
+    await expect(loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot })).rejects.toThrow();
 
     sqlite.close();
   });
 
   it("rejects non-existent file", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
 
-    await expect(loadSeed(join(tmpRoot, "nonexistent-seed.json"), flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot })).rejects.toThrow();
+    await expect(loadSeed(join(tmpRoot, "nonexistent-seed.json"), flowRepo, gateRepo, db, { allowedRoot: tmpRoot })).rejects.toThrow();
 
     sqlite.close();
   });
 
   it("loads seed without gates", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const seed = {
       flows: [{ name: "simple", initialState: "start", discipline: "engineering" }],
       states: [{ name: "start", flowName: "simple" }],
@@ -99,14 +99,14 @@ describe("loadSeed", () => {
     };
     const seedPath = writeSeedFile(seed);
 
-    const result = await loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot });
+    const result = await loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot });
     expect(result).toEqual({ flows: 1, gates: 0 });
 
     sqlite.close();
   });
 
   it("throws a descriptive error when a transition references an unknown gate", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const seed = {
       flows: [{ name: "broken", initialState: "start", discipline: "engineering" }],
       states: [{ name: "start", flowName: "broken" }, { name: "end", flowName: "broken" }],
@@ -118,7 +118,7 @@ describe("loadSeed", () => {
     const seedPath = writeSeedFile(seed);
 
     // The Zod schema validates gate references and throws with a descriptive message
-    await expect(loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot })).rejects.toThrow(
+    await expect(loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot })).rejects.toThrow(
       "nonexistent-gate",
     );
 
@@ -126,28 +126,28 @@ describe("loadSeed", () => {
   });
 
   it("rejects a seed path outside the allowed root", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
 
     await expect(
-      loadSeed("/etc/passwd", flowRepo, gateRepo, sqlite, { allowedRoot: "/home/fake" }),
+      loadSeed("/etc/passwd", flowRepo, gateRepo, db, { allowedRoot: "/home/fake" }),
     ).rejects.toThrow("Seed path escapes allowed root");
 
     sqlite.close();
   });
 
   it("rejects path traversal via relative segments", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const cwd = process.cwd();
 
     await expect(
-      loadSeed("../../etc/passwd", flowRepo, gateRepo, sqlite, { allowedRoot: cwd }),
+      loadSeed("../../etc/passwd", flowRepo, gateRepo, db, { allowedRoot: cwd }),
     ).rejects.toThrow("Seed path escapes allowed root");
 
     sqlite.close();
   });
 
   it("rejects symlink escape", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
 
     const dir = join(tmpRoot, `seed-symlink-${Date.now()}`);
     mkdirSync(dir, { recursive: true });
@@ -160,7 +160,7 @@ describe("loadSeed", () => {
     }
 
     await expect(
-      loadSeed(link, flowRepo, gateRepo, sqlite, { allowedRoot: dir }),
+      loadSeed(link, flowRepo, gateRepo, db, { allowedRoot: dir }),
     ).rejects.toThrow("Seed path escapes allowed root");
 
     sqlite.close();
@@ -168,7 +168,7 @@ describe("loadSeed", () => {
 
   it("rejects a path whose prefix matches root but is not a child", async () => {
     // startsWith("/tmp/foo/") would allow /tmp/foobar — relative() check prevents this
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const dir = join(tmpRoot, `seed-prefix-${Date.now()}`);
     mkdirSync(dir, { recursive: true });
     const adjacentDir = dir + "-other";
@@ -177,28 +177,28 @@ describe("loadSeed", () => {
     writeFileSync(seedPath, JSON.stringify(validSeed));
 
     await expect(
-      loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: dir }),
+      loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: dir }),
     ).rejects.toThrow("Seed path escapes allowed root");
 
     sqlite.close();
   });
 
   it("throws a friendly error on malformed JSON", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const dir = join(tmpRoot, `seed-malformed-${Date.now()}`);
     mkdirSync(dir, { recursive: true });
     const seedPath = join(dir, "bad.json");
     writeFileSync(seedPath, "{ not valid json !!");
 
     await expect(
-      loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot }),
+      loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot }),
     ).rejects.toThrow(/Invalid JSON in seed file/);
 
     sqlite.close();
   });
 
   it("preserves SyntaxError cause on malformed JSON", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const dir = join(tmpRoot, `seed-cause-${Date.now()}`);
     mkdirSync(dir, { recursive: true });
     const seedPath = join(dir, "bad.json");
@@ -206,7 +206,7 @@ describe("loadSeed", () => {
 
     let thrown: unknown;
     try {
-      await loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot });
+      await loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot });
     } catch (e) {
       thrown = e;
     }
@@ -218,10 +218,10 @@ describe("loadSeed", () => {
   });
 
   it("accepts a seed path within the allowed root", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const seedPath = writeSeedFile(validSeed);
 
-    const result = await loadSeed(seedPath, flowRepo, gateRepo, sqlite, { allowedRoot: tmpRoot });
+    const result = await loadSeed(seedPath, flowRepo, gateRepo, db, { allowedRoot: tmpRoot });
     expect(result).toEqual({ flows: 1, gates: 1 });
 
     sqlite.close();

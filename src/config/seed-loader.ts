@@ -1,8 +1,12 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import type Database from "better-sqlite3";
+import { sql } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type * as schema from "../repositories/drizzle/schema.js";
 import type { IFlowRepository, IGateRepository } from "../repositories/interfaces.js";
 import { SeedFileSchema } from "./zod-schemas.js";
+
+type Db = BetterSQLite3Database<typeof schema>;
 
 export interface LoadSeedOptions {
   allowedRoot?: string;
@@ -17,7 +21,7 @@ export async function loadSeed(
   seedPath: string,
   flowRepo: IFlowRepository,
   gateRepo: IGateRepository,
-  sqlite: InstanceType<typeof Database>,
+  db: Db,
   options?: LoadSeedOptions,
 ): Promise<LoadSeedResult> {
   const allowedRoot = options?.allowedRoot ?? process.cwd();
@@ -29,7 +33,17 @@ export async function loadSeed(
     throw new Error(`Seed path escapes allowed root: ${resolvedSeed} is not under ${resolvedRoot}`);
   }
 
-  const realSeed = realpathSync(resolvedSeed);
+  let realSeed: string;
+  try {
+    realSeed = realpathSync(resolvedSeed);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // File doesn't exist — let readFileSync produce its natural ENOENT error
+      readFileSync(resolvedSeed, "utf-8");
+      throw err; // unreachable, but satisfies TypeScript
+    }
+    throw err;
+  }
 
   let realRoot: string;
   try {
@@ -44,7 +58,7 @@ export async function loadSeed(
   }
 
   const raw = readFileSync(realSeed, "utf-8");
-  return parseSeedAndLoad(parseJson(raw, realSeed), flowRepo, gateRepo, sqlite);
+  return parseSeedAndLoad(parseJson(raw, realSeed), flowRepo, gateRepo, db);
 }
 
 function parseJson(raw: string, path: string): unknown {
@@ -60,11 +74,11 @@ async function parseSeedAndLoad(
   json: unknown,
   flowRepo: IFlowRepository,
   gateRepo: IGateRepository,
-  sqlite: InstanceType<typeof Database>,
+  db: Db,
 ): Promise<LoadSeedResult> {
   const parsed = SeedFileSchema.parse(json);
 
-  sqlite.exec("BEGIN");
+  db.run(sql`BEGIN`);
   try {
     // 1. Create gates first (transitions reference them by name)
     const gateNameToId = new Map<string, string>();
@@ -130,9 +144,9 @@ async function parseSeedAndLoad(
       }
     }
 
-    sqlite.exec("COMMIT");
+    db.run(sql`COMMIT`);
   } catch (err) {
-    sqlite.exec("ROLLBACK");
+    db.run(sql`ROLLBACK`);
     throw err;
   }
 

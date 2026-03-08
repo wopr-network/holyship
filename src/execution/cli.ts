@@ -132,7 +132,7 @@ program
       resolve(seedPath),
       flowRepo,
       gateRepo,
-      sqlite,
+      db,
       seedRoot ? { allowedRoot: seedRoot } : undefined,
     );
     console.log(`Loaded seed: flows: ${result.flows}, gates: ${result.gates}`);
