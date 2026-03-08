@@ -84,8 +84,6 @@ function mcpResultToApi(result: { content: { type: string; text: string }[]; isE
   }
 
   if (body === null) return { status: 204, body: null };
-  if (typeof body === "object" && body !== null && (body as Record<string, unknown>).next_action === "check_back")
-    return { status: 204, body: null };
   return { status: 200, body };
 }
 

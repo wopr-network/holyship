@@ -182,8 +182,8 @@ describe("HTTP Server - basic", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "worker" }),
     });
-    // No work available → 204 (no entity) or 404 (unknown flow)
-    expect([204, 404]).toContain(res.status);
+    // No work available → 200 check_back, 204, or 404 (unknown flow)
+    expect([200, 204, 404]).toContain(res.status);
   });
 
   it("POST with invalid JSON returns 400", async () => {
