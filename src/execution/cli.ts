@@ -374,11 +374,18 @@ program
 
       const shutdown = () => {
         restHttpServer?.close();
-        stopReaper().then(() => {
-          httpServer.close();
-          sqlite.close();
-          process.exit(0);
-        });
+        stopReaper()
+          .then(() => {
+            httpServer.close();
+            sqlite.close();
+            process.exit(0);
+          })
+          .catch((err: unknown) => {
+            console.error("[shutdown] stopReaper failed:", err);
+            httpServer.close();
+            sqlite.close();
+            process.exit(1);
+          });
       };
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
@@ -386,10 +393,16 @@ program
       // stdio (default)
       console.error("Starting MCP server on stdio...");
       const cleanup = () => {
-        stopReaper().then(() => {
-          sqlite.close();
-          process.exit(0);
-        });
+        stopReaper()
+          .then(() => {
+            sqlite.close();
+            process.exit(0);
+          })
+          .catch((err: unknown) => {
+            console.error("[shutdown] stopReaper failed:", err);
+            sqlite.close();
+            process.exit(1);
+          });
       };
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
@@ -399,10 +412,16 @@ program
       // HTTP-only mode — keep process alive
       const cleanup = () => {
         restHttpServer?.close();
-        stopReaper().then(() => {
-          sqlite.close();
-          process.exit(0);
-        });
+        stopReaper()
+          .then(() => {
+            sqlite.close();
+            process.exit(0);
+          })
+          .catch((err: unknown) => {
+            console.error("[shutdown] stopReaper failed:", err);
+            sqlite.close();
+            process.exit(1);
+          });
       };
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
