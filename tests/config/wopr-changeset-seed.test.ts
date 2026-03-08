@@ -24,10 +24,10 @@ const SEED_PATH = resolve(PROJECT_ROOT, "seeds/wopr-changeset.json");
 
 describe("wopr-changeset seed loads with gates", () => {
   it("loads the seed with 4 gates", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     const result = await loadSeed(SEED_PATH, flowRepo, gateRepo, {
       allowedRoot: PROJECT_ROOT,
-      sqlite,
+      db,
     });
 
     expect(result).toEqual({ flows: 1, gates: 4 });
@@ -35,10 +35,10 @@ describe("wopr-changeset seed loads with gates", () => {
   });
 
   it("all gates have failurePrompt and timeoutPrompt", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     await loadSeed(SEED_PATH, flowRepo, gateRepo, {
       allowedRoot: PROJECT_ROOT,
-      sqlite,
+      db,
     });
 
     for (const name of ["spec-posted", "ci-green", "review-bots-ready", "merge-queue"]) {
@@ -51,10 +51,10 @@ describe("wopr-changeset seed loads with gates", () => {
   });
 
   it("transitions reference the correct gates", async () => {
-    const { sqlite, flowRepo, gateRepo } = setupDb();
+    const { db, sqlite, flowRepo, gateRepo } = setupDb();
     await loadSeed(SEED_PATH, flowRepo, gateRepo, {
       allowedRoot: PROJECT_ROOT,
-      sqlite,
+      db,
     });
 
     const flow = await flowRepo.getByName("wopr-changeset");

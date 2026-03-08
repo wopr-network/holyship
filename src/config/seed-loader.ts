@@ -1,12 +1,16 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import type Database from "better-sqlite3";
+import { sql } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type * as schema from "../repositories/drizzle/schema.js";
 import type { IFlowRepository, IGateRepository } from "../repositories/interfaces.js";
 import { SeedFileSchema } from "./zod-schemas.js";
 
+type Db = BetterSQLite3Database<typeof schema>;
+
 export interface LoadSeedOptions {
   allowedRoot?: string;
-  sqlite?: Database.Database;
+  db?: Db;
 }
 
 export interface LoadSeedResult {
@@ -54,7 +58,7 @@ export async function loadSeed(
   }
 
   const raw = readFileSync(realSeed, "utf-8");
-  return parseSeedAndLoad(parseJson(raw, realSeed), flowRepo, gateRepo, options?.sqlite);
+  return parseSeedAndLoad(parseJson(raw, realSeed), flowRepo, gateRepo, options?.db);
 }
 
 function parseJson(raw: string, path: string): unknown {
@@ -70,10 +74,10 @@ async function parseSeedAndLoad(
   json: unknown,
   flowRepo: IFlowRepository,
   gateRepo: IGateRepository,
-  sqlite?: Database.Database,
+  db?: Db,
 ): Promise<LoadSeedResult> {
   const parsed = SeedFileSchema.parse(json);
-  if (sqlite) sqlite.exec("BEGIN");
+  if (db) db.run(sql`BEGIN`);
 
   try {
     // 1. Create gates first (transitions reference them by name)
@@ -140,13 +144,13 @@ async function parseSeedAndLoad(
       }
     }
 
-    if (sqlite) sqlite.exec("COMMIT");
+    if (db) db.run(sql`COMMIT`);
     return {
       flows: parsed.flows.length,
       gates: parsed.gates.length,
     };
   } catch (err) {
-    if (sqlite) sqlite.exec("ROLLBACK");
+    if (db) db.run(sql`ROLLBACK`);
     throw err;
   }
 }
