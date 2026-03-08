@@ -31,20 +31,6 @@ export function resolveGateTimeout(
   return getSystemDefaultGateTimeout();
 }
 
-function getSystemDefaultGateTimeout(): number {
-  const parsed = parseInt(process.env.DEFCON_DEFAULT_GATE_TIMEOUT_MS ?? "", 10);
-  return !Number.isNaN(parsed) && parsed > 0 ? parsed : 300000;
-}
-
-export function resolveGateTimeout(
-  gateTimeoutMs: number | null | undefined,
-  flowGateTimeoutMs: number | null | undefined,
-): number {
-  if (gateTimeoutMs != null && gateTimeoutMs > 0) return gateTimeoutMs;
-  if (flowGateTimeoutMs != null && flowGateTimeoutMs > 0) return flowGateTimeoutMs;
-  return getSystemDefaultGateTimeout();
-}
-
 /**
  * Evaluate a gate against an entity. Records the result in gateRepo.
  * Supports "command", "function", and "api" gate types.
