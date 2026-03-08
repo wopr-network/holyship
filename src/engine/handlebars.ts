@@ -34,7 +34,20 @@ hbs.registerHelper("time_in_state", (entity: { updatedAt: string | Date }) =>
   String(Date.now() - new Date(entity.updatedAt).getTime()),
 );
 
-const BUILTIN_HELPERS = new Set(["gt", "lt", "eq", "invocation_count", "gate_passed", "has_artifact", "time_in_state"]);
+hbs.registerHelper("total_invocations", (entity: { invocations?: { stage: string }[] }) =>
+  String(Array.isArray(entity.invocations) ? entity.invocations.length : 0),
+);
+
+const BUILTIN_HELPERS = new Set([
+  "gt",
+  "lt",
+  "eq",
+  "invocation_count",
+  "gate_passed",
+  "has_artifact",
+  "time_in_state",
+  "total_invocations",
+]);
 
 /** Forbidden patterns in templates — OWASP A03 Injection prevention. */
 const UNSAFE_PATTERN =
