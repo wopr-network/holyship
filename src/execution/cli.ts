@@ -372,57 +372,26 @@ program
         console.log(`MCP SSE server listening on ${host}:${boundPort}`);
       });
 
-      const shutdown = () => {
-        restHttpServer?.close();
-        stopReaper()
-          .then(() => {
-            httpServer.close();
-            sqlite.close();
-            process.exit(0);
-          })
-          .catch((err: unknown) => {
-            console.error("[shutdown] stopReaper failed:", err);
-            httpServer.close();
-            sqlite.close();
-            process.exit(1);
-          });
-      };
+      const shutdown = makeShutdownHandler({
+        stopReaper,
+        closeables: [{ close: () => restHttpServer?.close() }, httpServer, sqlite],
+      });
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
     } else if (startMcp) {
       // stdio (default)
       console.error("Starting MCP server on stdio...");
-      const cleanup = () => {
-        stopReaper()
-          .then(() => {
-            sqlite.close();
-            process.exit(0);
-          })
-          .catch((err: unknown) => {
-            console.error("[shutdown] stopReaper failed:", err);
-            sqlite.close();
-            process.exit(1);
-          });
-      };
+      const cleanup = makeShutdownHandler({ stopReaper, closeables: [sqlite] });
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
       const mcpOpts: McpServerOpts = { adminToken, workerToken, stdioTrusted: true };
       await startStdioServer(deps, mcpOpts);
     } else {
       // HTTP-only mode — keep process alive
-      const cleanup = () => {
-        restHttpServer?.close();
-        stopReaper()
-          .then(() => {
-            sqlite.close();
-            process.exit(0);
-          })
-          .catch((err: unknown) => {
-            console.error("[shutdown] stopReaper failed:", err);
-            sqlite.close();
-            process.exit(1);
-          });
-      };
+      const cleanup = makeShutdownHandler({
+        stopReaper,
+        closeables: [{ close: () => restHttpServer?.close() }, sqlite],
+      });
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
     }
@@ -536,6 +505,33 @@ export function verifySessionToken(storedTokenHash: string | undefined, incoming
   const incomingBuf = Buffer.from(hashIncoming, "hex");
   if (storedBuf.length !== incomingBuf.length) return false;
   return timingSafeEqual(storedBuf, incomingBuf);
+}
+
+/**
+ * Builds a shutdown handler that calls stopReaper() with a timeout guard,
+ * then closes resources and exits. Exported for unit testing.
+ */
+export function makeShutdownHandler(opts: {
+  stopReaper: () => Promise<void>;
+  closeables: Array<{ close: () => void }>;
+  stopReaperTimeoutMs?: number;
+}): () => void {
+  const { stopReaper, closeables, stopReaperTimeoutMs = 5000 } = opts;
+  return () => {
+    const timeoutPromise = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error("stopReaper timed out")), stopReaperTimeoutMs),
+    );
+    Promise.race([stopReaper(), timeoutPromise])
+      .then(() => {
+        for (const c of closeables) c.close();
+        process.exit(0);
+      })
+      .catch((err: unknown) => {
+        console.error("[shutdown] stopReaper failed:", err);
+        for (const c of closeables) c.close();
+        process.exit(1);
+      });
+  };
 }
 
 export function extractBearerToken(header: string | undefined): string | undefined {
