@@ -552,18 +552,6 @@ export class Engine {
         const claimed = await this.entityRepo.claim(flow.id, state.name, worker_id ?? `agent:${role}`);
         if (!claimed) continue;
 
-        if (worker_id) {
-          const windowMs = flow.affinityWindowMs ?? 300000;
-          try {
-            await this.entityRepo.setAffinity(claimed.id, worker_id, role, new Date(Date.now() + windowMs));
-          } catch (err) {
-            this.logger.warn(
-              `[engine] setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`,
-              err,
-            );
-          }
-        }
-
         const canCreate = await this.checkConcurrency(flow, claimed);
         if (!canCreate) {
           await this.entityRepo.release(claimed.id, worker_id ?? `agent:${role}`);
@@ -602,6 +590,18 @@ export class Engine {
             this.logger.error(`[engine] release() failed for entity ${claimed.id}:`, err);
           }
           continue;
+        }
+
+        if (worker_id) {
+          const windowMs = flow.affinityWindowMs ?? 300000;
+          try {
+            await this.entityRepo.setAffinity(claimed.id, worker_id, role, new Date(Date.now() + windowMs));
+          } catch (err) {
+            this.logger.warn(
+              `[engine] setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`,
+              err,
+            );
+          }
         }
 
         await this.eventEmitter.emit({
