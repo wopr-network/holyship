@@ -387,6 +387,13 @@ describe("Engine", () => {
       const mocks = makeMockRepos();
       const claimedEntity = makeEntity({ state: "coding", claimedBy: "agent-1" });
       (mocks.entityRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue(claimedEntity);
+      const claimedInvocation: Invocation = {
+        id: "inv-1", entityId: "ent-1", stage: "coding",
+        mode: "active", prompt: "Do the thing", context: null,
+        claimedBy: "agent:coder", claimedAt: new Date(), startedAt: null, completedAt: null,
+        failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 1800000,
+      };
+      (mocks.invocationRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue(claimedInvocation);
       const engine = new Engine({ ...mocks, adapters: new Map() });
 
       const result = await engine.claimWork("coder", "test-flow");
@@ -446,6 +453,38 @@ describe("Engine", () => {
       expect(result).toBeNull();
       // Entity claim should have been released
       expect(mocks.entityRepo.release).toHaveBeenCalledWith(claimedEntity.id, 'agent:coder');
+    });
+
+    it("returns 'all_claimed' when entities exist but none are claimable", async () => {
+      const mocks = makeMockRepos();
+      (mocks.entityRepo.hasAnyInFlowAndState as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      const engine = new Engine({ ...mocks, adapters: new Map() });
+
+      const result = await engine.claimWork("coder", "test-flow");
+
+      expect(result).toBe("all_claimed");
+    });
+
+    it("uses worker_id as invocation claimedBy token when provided", async () => {
+      const mocks = makeMockRepos();
+      const claimedEntity = makeEntity({ state: "coding", claimedBy: "wkr_123" });
+      const unclaimedInvocation: Invocation = {
+        id: "inv-1", entityId: "ent-1", stage: "coding",
+        mode: "active", prompt: "Do the thing", context: null,
+        claimedBy: null, claimedAt: null, startedAt: null, completedAt: null,
+        failedAt: null, signal: null, artifacts: null, error: null, ttlMs: 1800000,
+      };
+
+      (mocks.invocationRepo.findUnclaimedByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([unclaimedInvocation]);
+      (mocks.entityRepo.claimById as ReturnType<typeof vi.fn>).mockResolvedValue(claimedEntity);
+      (mocks.invocationRepo.claim as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...unclaimedInvocation, claimedBy: "wkr_123", claimedAt: new Date(),
+      });
+
+      const engine = new Engine({ ...mocks, adapters: new Map() });
+      await engine.claimWork("coder", "test-flow", "wkr_123");
+
+      expect(mocks.invocationRepo.claim).toHaveBeenCalledWith("inv-1", "wkr_123");
     });
   });
 

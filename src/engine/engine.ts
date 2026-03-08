@@ -388,7 +388,11 @@ export class Engine {
     return entity;
   }
 
-  async claimWork(role: string, flowName?: string, worker_id?: string): Promise<ClaimWorkResult | null> {
+  async claimWork(
+    role: string,
+    flowName?: string,
+    worker_id?: string,
+  ): Promise<ClaimWorkResult | "all_claimed" | null> {
     // 1. Find candidate flows filtered by discipline
     let flows: Flow[];
     if (flowName) {
@@ -475,7 +479,7 @@ export class Engine {
 
       let claimedInvocation: Invocation | null;
       try {
-        claimedInvocation = await this.invocationRepo.claim(pending.id, `agent:${role}`);
+        claimedInvocation = await this.invocationRepo.claim(pending.id, worker_id ?? `agent:${role}`);
       } catch (err) {
         this.logger.error(`[engine] invocationRepo.claim() failed for invocation ${pending.id}:`, err);
         try {
@@ -558,6 +562,29 @@ export class Engine {
             ? { systemPrompt: build.systemPrompt, userContent: build.userContent }
             : undefined,
         );
+
+        const entityClaimToken = worker_id ?? `agent:${role}`;
+        let claimedInvocation: Invocation | null;
+        try {
+          claimedInvocation = await this.invocationRepo.claim(invocation.id, entityClaimToken);
+        } catch (err) {
+          this.logger.error(`[engine] invocationRepo.claim() failed for invocation ${invocation.id}:`, err);
+          try {
+            await this.entityRepo.release(claimed.id, entityClaimToken);
+          } catch (releaseErr) {
+            this.logger.error(`[engine] release() failed for entity ${claimed.id}:`, releaseErr);
+          }
+          continue;
+        }
+        if (!claimedInvocation) {
+          try {
+            await this.entityRepo.release(claimed.id, entityClaimToken);
+          } catch (err) {
+            this.logger.error(`[engine] release() failed for entity ${claimed.id}:`, err);
+          }
+          continue;
+        }
+
         await this.eventEmitter.emit({
           type: "entity.claimed",
           entityId: claimed.id,
@@ -567,7 +594,7 @@ export class Engine {
         });
         return {
           entityId: claimed.id,
-          invocationId: invocation.id,
+          invocationId: claimedInvocation.id,
           flowName: flow.name,
           stage: state.name,
           prompt: build.prompt,
@@ -576,6 +603,14 @@ export class Engine {
       }
     }
 
+    // 9. No work claimed — distinguish "all entities busy" (short retry) from "empty backlog" (long retry)
+    for (const flow of flows) {
+      const claimableStateNames = flow.states.filter((s) => !!s.promptTemplate).map((s) => s.name);
+      if (claimableStateNames.length > 0) {
+        const hasAny = await this.entityRepo.hasAnyInFlowAndState(flow.id, claimableStateNames);
+        if (hasAny) return "all_claimed";
+      }
+    }
     return null;
   }
 
