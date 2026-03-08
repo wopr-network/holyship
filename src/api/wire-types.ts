@@ -1,6 +1,6 @@
 /**
  * Wire types for defcon's REST and MCP APIs.
- * Exported for consumers (e.g. norad) to import instead of duplicating.
+ * Exported for consumers (e.g. radar) to import instead of duplicating.
  */
 
 export type ClaimResponse =
