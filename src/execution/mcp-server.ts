@@ -540,7 +540,7 @@ async function handleFlowClaim(deps: McpServerDeps, args: Record<string, unknown
     result = await deps.engine.claimWork(role, flowName, worker_id);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return errorResult(message);
+    return jsonResult({ next_action: "check_back", message });
   }
   if (!result) {
     return noWorkResult(RETRY_LONG_MS, role);
