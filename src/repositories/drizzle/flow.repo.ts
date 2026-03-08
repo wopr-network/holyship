@@ -367,6 +367,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
             promptTemplate: s.promptTemplate,
             constraints: s.constraints as Record<string, unknown> | null,
             onEnter: (s.onEnter ?? null) as OnEnterConfig | null,
+            retryAfterMs: s.retryAfterMs ?? null,
           })
           .run();
       }

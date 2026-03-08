@@ -41,6 +41,11 @@ export async function handleFlowClaim(deps: McpServerDeps, args: Record<string, 
   if (!v.ok) return v.result;
   const { worker_id, role, flow: flowName } = v.data;
 
+  // 0. Reject drained workers immediately
+  if (worker_id && deps.engine?.isDraining(worker_id)) {
+    return noWorkResult(RETRY_SHORT_MS, role);
+  }
+
   // 1. Find candidate flows filtered by discipline
   let candidateFlows: import("../../repositories/interfaces.js").Flow[] = [];
 
