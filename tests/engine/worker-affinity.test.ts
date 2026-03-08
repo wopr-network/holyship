@@ -257,7 +257,8 @@ describe("worker affinity — claim priority", () => {
     });
 
     const entityRepo = makeEntityRepo({
-      claim: vi.fn().mockResolvedValue(entity),
+      claimById: vi.fn().mockResolvedValue(entity),
+      get: vi.fn().mockResolvedValue(entity),
     });
 
     const flowRepo = makeFlowRepo(flow);
@@ -273,6 +274,7 @@ describe("worker affinity — claim priority", () => {
 
   it("discipline boundary handoff records new affinity worker", async () => {
     const entity = makeEntity({
+      state: "deploy",
       affinityWorkerId: "wkr-eng-1",
       affinityRole: "engineering",
       affinityExpiresAt: new Date(Date.now() + 300000),
@@ -308,7 +310,7 @@ describe("worker affinity — claim priority", () => {
     });
 
     const entityRepo = makeEntityRepo({
-      claim: vi.fn().mockResolvedValue(entity),
+      claimById: vi.fn().mockResolvedValue(entity),
       get: vi.fn().mockResolvedValue(entity),
     });
 
@@ -332,7 +334,8 @@ describe("worker affinity — claim priority", () => {
     });
 
     const entityRepo = makeEntityRepo({
-      claim: vi.fn().mockResolvedValue(entity),
+      claimById: vi.fn().mockResolvedValue(entity),
+      get: vi.fn().mockResolvedValue(entity),
     });
 
     const flowRepo = makeFlowRepo(flow);
