@@ -477,11 +477,11 @@ export class Engine {
       try {
         claimedInvocation = await this.invocationRepo.claim(pending.id, `agent:${role}`);
       } catch (err) {
-        console.error(`invocationRepo.claim() failed for invocation ${pending.id}:`, err);
+        this.logger.error(`[engine] invocationRepo.claim() failed for invocation ${pending.id}:`, err);
         try {
           await this.entityRepo.release(claimed.id, entityClaimToken);
         } catch (releaseErr) {
-          console.error(`release() failed for entity ${claimed.id}:`, releaseErr);
+          this.logger.error(`[engine] release() failed for entity ${claimed.id}:`, releaseErr);
         }
         continue;
       }
@@ -489,7 +489,7 @@ export class Engine {
         try {
           await this.entityRepo.release(claimed.id, entityClaimToken);
         } catch (err) {
-          console.error(`release() failed for entity ${claimed.id}:`, err);
+          this.logger.error(`[engine] release() failed for entity ${claimed.id}:`, err);
         }
         continue;
       }
@@ -499,7 +499,10 @@ export class Engine {
         try {
           await this.entityRepo.setAffinity(claimed.id, worker_id, role, new Date(Date.now() + windowMs));
         } catch (err) {
-          console.warn(`setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`, err);
+          this.logger.warn(
+            `[engine] setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`,
+            err,
+          );
         }
       }
 
@@ -529,7 +532,7 @@ export class Engine {
     for (const flow of flows) {
       const claimableStates = flow.states.filter((s) => !!s.promptTemplate);
       for (const state of claimableStates) {
-        const claimed = await this.entityRepo.claim(flow.id, state.name, `agent:${role}`);
+        const claimed = await this.entityRepo.claim(flow.id, state.name, worker_id ?? `agent:${role}`);
         if (!claimed) continue;
 
         if (worker_id) {
@@ -537,7 +540,10 @@ export class Engine {
           try {
             await this.entityRepo.setAffinity(claimed.id, worker_id, role, new Date(Date.now() + windowMs));
           } catch (err) {
-            console.warn(`setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`, err);
+            this.logger.warn(
+              `[engine] setAffinity failed for entity ${claimed.id} worker ${worker_id} — continuing:`,
+              err,
+            );
           }
         }
 
