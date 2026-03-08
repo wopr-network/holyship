@@ -480,6 +480,16 @@ export class Engine {
       const claimed = await this.entityRepo.claimById(entity.id, entityClaimToken);
       if (!claimed) continue;
 
+      // Post-claim state validation — entity may have transitioned between guard check and claim
+      if (claimed.state !== pending.stage) {
+        try {
+          await this.entityRepo.release(claimed.id, entityClaimToken);
+        } catch (releaseErr) {
+          this.logger.error(`[engine] release() failed for entity ${claimed.id} after state mismatch:`, releaseErr);
+        }
+        continue;
+      }
+
       let claimedInvocation: Invocation | null;
       try {
         claimedInvocation = await this.invocationRepo.claim(pending.id, worker_id ?? `agent:${role}`);
@@ -554,6 +564,12 @@ export class Engine {
           }
         }
 
+        const canCreate = await this.checkConcurrency(flow, claimed);
+        if (!canCreate) {
+          await this.entityRepo.release(claimed.id, worker_id ?? `agent:${role}`);
+          continue;
+        }
+
         const build = await this.buildPromptForEntity(state, claimed, flow);
         const invocation = await this.invocationRepo.create(
           claimed.id,
@@ -592,7 +608,7 @@ export class Engine {
           type: "entity.claimed",
           entityId: claimed.id,
           flowId: flow.id,
-          agentId: `agent:${role}`,
+          agentId: worker_id ?? `agent:${role}`,
           emittedAt: new Date(),
         });
         return {
