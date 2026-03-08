@@ -52,6 +52,13 @@ describe("getHandlebars", () => {
     expect(tpl({ entity: { artifacts: { diff: "data" } } })).toBe("true");
   });
 
+  it("has total_invocations helper registered", () => {
+    const hbs = getHandlebars();
+    const tpl = hbs.compile("{{total_invocations entity}}");
+    expect(tpl({ entity: { invocations: [{ stage: "review" }, { stage: "build" }] } })).toBe("2");
+    expect(tpl({ entity: {} })).toBe("0");
+  });
+
   it("has time_in_state helper registered", () => {
     const hbs = getHandlebars();
     const tpl = hbs.compile("{{time_in_state entity}}");
