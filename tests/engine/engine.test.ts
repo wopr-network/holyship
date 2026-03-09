@@ -86,6 +86,7 @@ function makeMockRepos() {
     create: vi.fn(),
     get: vi.fn().mockResolvedValue(flow),
     getByName: vi.fn().mockResolvedValue(flow),
+    getAtVersion: vi.fn().mockResolvedValue(flow),
     update: vi.fn(),
     addState: vi.fn(),
     updateState: vi.fn(),
@@ -360,7 +361,7 @@ describe("Engine", () => {
       const entity = await engine.createEntity("test-flow");
 
       expect(mocks.flowRepo.getByName).toHaveBeenCalledWith("test-flow");
-      expect(mocks.entityRepo.create).toHaveBeenCalledWith("flow-1", "open", undefined);
+      expect(mocks.entityRepo.create).toHaveBeenCalledWith("flow-1", "open", undefined, 1);
       expect(mocks.events).toContainEqual(expect.objectContaining({ type: "entity.created" }));
     });
 
