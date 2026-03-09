@@ -901,7 +901,9 @@ async function handleAdminEntityCancel(deps: McpServerDeps, args: Record<string,
   const cancelled: string[] = [];
   const MAX_CANCEL_DEPTH = 100;
 
-  async function cancelOne(eid: string, depth: number): Promise<void> {
+  async function cancelOne(eid: string, depth: number, visited: Set<string>): Promise<void> {
+    if (visited.has(eid)) return;
+    visited.add(eid);
     if (depth > MAX_CANCEL_DEPTH) {
       throw new Error(
         `cancelOne exceeded maximum recursion depth of ${MAX_CANCEL_DEPTH} — possible cycle or pathologically deep entity tree`,
@@ -948,12 +950,12 @@ async function handleAdminEntityCancel(deps: McpServerDeps, args: Record<string,
     if (cascade) {
       const children = await deps.entities.findByParentId(eid);
       for (const child of children) {
-        await cancelOne(child.id, depth + 1);
+        await cancelOne(child.id, depth + 1, visited);
       }
     }
   }
 
-  const run = () => cancelOne(entity_id, 0);
+  const run = () => cancelOne(entity_id, 0, new Set<string>());
   if (deps.withTransaction) {
     await deps.withTransaction(run);
   } else {
