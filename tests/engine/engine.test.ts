@@ -86,6 +86,7 @@ function makeMockRepos() {
     create: vi.fn(),
     get: vi.fn().mockResolvedValue(flow),
     getByName: vi.fn().mockResolvedValue(flow),
+    getAtVersion: vi.fn().mockResolvedValue(flow),
     update: vi.fn(),
     addState: vi.fn(),
     updateState: vi.fn(),
@@ -183,6 +184,7 @@ describe("Engine", () => {
         ],
       });
       (mocks.flowRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithGate);
+      (mocks.flowRepo.getAtVersion as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithGate);
       (mocks.gateRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: "gate-1", name: "lint", type: "command", command: "exit 1",
         functionRef: null, apiConfig: null, timeoutMs: 30000,
@@ -208,6 +210,7 @@ describe("Engine", () => {
         ],
       });
       (mocks.flowRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithGate);
+      (mocks.flowRepo.getAtVersion as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithGate);
       (mocks.gateRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: "gate-1", name: "lint", type: "command", command: "exit 1",
         functionRef: null, apiConfig: null, timeoutMs: 30000,
@@ -246,6 +249,7 @@ describe("Engine", () => {
         ],
       });
       (mocks.flowRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithGate);
+      (mocks.flowRepo.getAtVersion as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithGate);
       (mocks.gateRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: "gate-1", name: "lint", type: "command", command: "exit 1",
         functionRef: null, apiConfig: null, timeoutMs: 30000,
@@ -320,6 +324,7 @@ describe("Engine", () => {
         ],
       });
       (mocks.flowRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithTemplate);
+      (mocks.flowRepo.getAtVersion as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithTemplate);
 
       const engine = new Engine({ ...mocks, adapters: new Map() });
       await engine.processSignal("ent-1", "start");
@@ -360,7 +365,7 @@ describe("Engine", () => {
       const entity = await engine.createEntity("test-flow");
 
       expect(mocks.flowRepo.getByName).toHaveBeenCalledWith("test-flow");
-      expect(mocks.entityRepo.create).toHaveBeenCalledWith("flow-1", "open", undefined);
+      expect(mocks.entityRepo.create).toHaveBeenCalledWith("flow-1", "open", undefined, 1);
       expect(mocks.events).toContainEqual(expect.objectContaining({ type: "entity.created" }));
     });
 
@@ -525,6 +530,7 @@ describe("Engine", () => {
       const mocks = makeMockRepos();
       const flowWithLimit = makeFlow({ maxConcurrent: 1 });
       (mocks.flowRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithLimit);
+      (mocks.flowRepo.getAtVersion as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithLimit);
       // Simulate one pending invocation already in the flow
       (mocks.invocationRepo.findByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([
         {
@@ -546,6 +552,7 @@ describe("Engine", () => {
       const mocks = makeMockRepos();
       const flowWithLimit = makeFlow({ maxConcurrent: 1 });
       (mocks.flowRepo.get as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithLimit);
+      (mocks.flowRepo.getAtVersion as ReturnType<typeof vi.fn>).mockResolvedValue(flowWithLimit);
       (mocks.invocationRepo.findByFlow as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       const engine = new Engine({ ...mocks, adapters: new Map() });
 
@@ -695,7 +702,7 @@ describe("Engine", () => {
       const engine = new Engine({ ...mocks, adapters: new Map() });
       const status = await engine.getStatus();
 
-      expect(status).toEqual({ flows: {}, activeInvocations: 0, pendingClaims: 0 });
+      expect(status).toEqual({ flows: {}, activeInvocations: 0, pendingClaims: 0, versionDistribution: {} });
     });
 
     it("isolates entity counts per flow and aggregates invocation totals across flows", async () => {

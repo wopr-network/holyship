@@ -149,6 +149,10 @@ export const AdminEntityResetSchema = z.object({
   target_state: z.string().min(1),
 });
 
+export const AdminEntityMigrateSchema = z.object({
+  entity_id: z.string().min(1),
+});
+
 export const AdminWorkerDrainSchema = z.object({
   worker_id: z.string().min(1),
 });

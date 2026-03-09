@@ -141,6 +141,86 @@ export class DrizzleFlowRepository implements IFlowRepository {
     return this.hydrateFlow(rows[0]);
   }
 
+  async getAtVersion(flowId: string, version: number): Promise<Flow | null> {
+    const current = await this.get(flowId);
+    if (!current) return null;
+    if (current.version === version) return current;
+
+    const rows = this.db
+      .select()
+      .from(flowVersions)
+      .where(and(eq(flowVersions.flowId, flowId), eq(flowVersions.version, version)))
+      .all();
+    if (rows.length === 0) return null;
+
+    const snap = rows[0].snapshot as {
+      name: string;
+      description: string | null;
+      entitySchema: Record<string, unknown> | null;
+      initialState: string;
+      maxConcurrent: number;
+      maxConcurrentPerRepo: number;
+      affinityWindowMs: number;
+      gateTimeoutMs: number | null;
+      claimRetryAfterMs: number | null;
+      version: number;
+      createdBy: string | null;
+      discipline: string | null;
+      defaultModelTier: string | null;
+      timeoutPrompt: string | null;
+      createdAt: number | null;
+      updatedAt: number | null;
+      states: State[];
+      transitions: Transition[];
+    };
+    return {
+      id: flowId,
+      name: snap.name ?? current.name,
+      description: snap.description ?? null,
+      entitySchema: snap.entitySchema ?? null,
+      initialState: snap.initialState ?? current.initialState,
+      maxConcurrent: snap.maxConcurrent ?? 0,
+      maxConcurrentPerRepo: snap.maxConcurrentPerRepo ?? 0,
+      affinityWindowMs: snap.affinityWindowMs ?? 300000,
+      claimRetryAfterMs: snap.claimRetryAfterMs ?? null,
+      gateTimeoutMs: snap.gateTimeoutMs ?? null,
+      version,
+      createdBy: snap.createdBy ?? null,
+      discipline: snap.discipline ?? null,
+      defaultModelTier: snap.defaultModelTier ?? null,
+      timeoutPrompt: snap.timeoutPrompt ?? null,
+      paused: current.paused,
+      createdAt: snap.createdAt ? new Date(snap.createdAt) : null,
+      updatedAt: snap.updatedAt ? new Date(snap.updatedAt) : null,
+      states: (snap.states ?? []).map((s) => ({
+        id: s.id,
+        flowId,
+        name: s.name,
+        agentRole: s.agentRole ?? null,
+        modelTier: s.modelTier ?? null,
+        mode: s.mode ?? "passive",
+        promptTemplate: s.promptTemplate ?? null,
+        constraints: s.constraints ?? null,
+        onEnter: s.onEnter ?? null,
+        onExit: s.onExit ?? null,
+        retryAfterMs: s.retryAfterMs ?? null,
+      })),
+      transitions: (snap.transitions ?? []).map((t) => ({
+        id: t.id,
+        flowId,
+        fromState: t.fromState,
+        toState: t.toState,
+        trigger: t.trigger,
+        gateId: t.gateId ?? null,
+        condition: t.condition ?? null,
+        priority: t.priority ?? 0,
+        spawnFlow: t.spawnFlow ?? null,
+        spawnTemplate: t.spawnTemplate ?? null,
+        createdAt: t.createdAt ? new Date(t.createdAt) : null,
+      })),
+    };
+  }
+
   async list(): Promise<Flow[]> {
     const rows = this.db.select().from(flowDefinitions).all();
     return rows.map((row) => this.hydrateFlow(row));
@@ -315,6 +395,11 @@ export class DrizzleFlowRepository implements IFlowRepository {
           changeReason: null,
           createdAt: now,
         })
+        .run();
+
+      tx.update(flowDefinitions)
+        .set({ version: version + 1, updatedAt: now })
+        .where(eq(flowDefinitions.id, flowId))
         .run();
 
       return version;

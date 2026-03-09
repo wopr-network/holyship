@@ -52,6 +52,7 @@ export interface EngineStatus {
   flows: Record<string, Record<string, number>>;
   activeInvocations: number;
   pendingClaims: number;
+  versionDistribution: Record<string, Record<string, number>>;
 }
 
 export interface EngineDeps {
@@ -160,9 +161,9 @@ export class Engine {
     const entity = await this.entityRepo.get(entityId);
     if (!entity) throw new NotFoundError(`Entity "${entityId}" not found`);
 
-    // 2. Load flow
-    const flow = await this.flowRepo.get(entity.flowId);
-    if (!flow) throw new NotFoundError(`Flow "${entity.flowId}" not found`);
+    // 2. Load flow at entity's pinned version
+    const flow = await this.flowRepo.getAtVersion(entity.flowId, entity.flowVersion);
+    if (!flow) throw new NotFoundError(`Flow "${entity.flowId}" version ${entity.flowVersion} not found`);
 
     // 3. Find transition
     const transition = findTransition(flow, entity.state, signal, { entity }, true, this.logger);
@@ -458,7 +459,7 @@ export class Engine {
     const flow = await this.flowRepo.getByName(flowName);
     if (!flow) throw new NotFoundError(`Flow "${flowName}" not found`);
 
-    let entity = await this.entityRepo.create(flow.id, flow.initialState, refs);
+    let entity = await this.entityRepo.create(flow.id, flow.initialState, refs, flow.version);
 
     // Store any caller-supplied payload as initial artifacts so prompt templates
     // can access refs like {{entity.artifacts.refs.linear.id}}.
@@ -672,9 +673,11 @@ export class Engine {
         }
       }
 
-      const state = flow.states.find((s) => s.name === pending.stage);
+      const versionedFlow = await this.flowRepo.getAtVersion(claimed.flowId, claimed.flowVersion);
+      const effectiveFlow = versionedFlow ?? flow;
+      const state = effectiveFlow.states.find((s) => s.name === pending.stage);
       const build = state
-        ? await this.buildPromptForEntity(state, claimed, flow)
+        ? await this.buildPromptForEntity(state, claimed, effectiveFlow)
         : { prompt: pending.prompt, context: null };
 
       await this.eventEmitter.emit({
@@ -701,13 +704,15 @@ export class Engine {
         const claimed = await this.entityRepo.claim(flow.id, state.name, worker_id ?? `agent:${role}`);
         if (!claimed) continue;
 
-        const canCreate = await this.checkConcurrency(flow, claimed);
+        const claimedVersionedFlow = await this.flowRepo.getAtVersion(claimed.flowId, claimed.flowVersion);
+        const claimedEffectiveFlow = claimedVersionedFlow ?? flow;
+        const canCreate = await this.checkConcurrency(claimedEffectiveFlow, claimed);
         if (!canCreate) {
           await this.entityRepo.release(claimed.id, worker_id ?? `agent:${role}`);
           continue;
         }
 
-        const build = await this.buildPromptForEntity(state, claimed, flow);
+        const build = await this.buildPromptForEntity(state, claimed, claimedEffectiveFlow);
         const invocation = await this.invocationRepo.create(
           claimed.id,
           state.name,
@@ -829,7 +834,22 @@ export class Engine {
       pendingClaims += pending;
     }
 
-    return { flows: statusData, activeInvocations, pendingClaims };
+    const versionDistribution: Record<string, Record<string, number>> = {};
+    for (const flow of allFlows) {
+      const versionCounts: Record<string, number> = {};
+      for (const state of flow.states) {
+        const stateEntities = await this.entityRepo.findByFlowAndState(flow.id, state.name);
+        for (const e of stateEntities) {
+          const vKey = String(e.flowVersion);
+          versionCounts[vKey] = (versionCounts[vKey] ?? 0) + 1;
+        }
+      }
+      if (Object.keys(versionCounts).length > 0) {
+        versionDistribution[flow.id] = versionCounts;
+      }
+    }
+
+    return { flows: statusData, activeInvocations, pendingClaims, versionDistribution };
   }
 
   startReaper(intervalMs: number, entityTtlMs: number = 60_000): () => Promise<void> {
