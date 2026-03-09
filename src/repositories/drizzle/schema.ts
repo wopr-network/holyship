@@ -214,3 +214,31 @@ export const domainEvents = sqliteTable(
     typeIdx: index("domain_events_type_idx").on(table.type, table.emittedAt),
   }),
 );
+
+export const entitySnapshots = sqliteTable(
+  "entity_snapshots",
+  {
+    id: text("id").primaryKey(),
+    entityId: text("entity_id").notNull(),
+    sequence: integer("sequence").notNull(),
+    state: text("state").notNull(),
+    flowId: text("flow_id").notNull(),
+    refs: text("refs", { mode: "json" }),
+    artifacts: text("artifacts", { mode: "json" }),
+    claimedBy: text("claimed_by"),
+    claimedAt: integer("claimed_at"),
+    flowVersion: integer("flow_version"),
+    priority: integer("priority").default(0),
+    affinityWorkerId: text("affinity_worker_id"),
+    affinityRole: text("affinity_role"),
+    affinityExpiresAt: integer("affinity_expires_at"),
+    createdAt: integer("created_at"),
+    updatedAt: integer("updated_at"),
+    snapshotAt: integer("snapshot_at").notNull(),
+    parentEntityId: text("parent_entity_id"),
+  },
+  (table) => ({
+    entitySeqUnique: uniqueIndex("entity_snapshots_entity_seq_idx").on(table.entityId, table.sequence),
+    entityLatestIdx: index("entity_snapshots_entity_latest_idx").on(table.entityId, table.snapshotAt),
+  }),
+);
