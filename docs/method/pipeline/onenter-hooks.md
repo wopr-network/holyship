@@ -68,7 +68,9 @@ onEnter failures are considered infrastructure failures, not work failures. They
 
 ## Idempotency
 
-If all named artifact keys are already present on the entity when a state is entered, the hook is skipped. This ensures that re-entry into a state (e.g., after a gate failure routes back) does not re-run expensive setup.
+If all named artifact keys are already present on the entity when a state is entered, the hook is skipped. This ensures that incidental re-entry into a state does not re-run expensive setup.
+
+When a state is entered intentionally (e.g., after a gate failure routes back for a fresh attempt), the engine clears the stale onEnter artifact keys before running the hook. This allows the hook to re-execute with a clean slate rather than being skipped due to leftover artifacts from the prior run.
 
 Design onEnter commands to be safely re-runnable anyway, as a defensive measure.
 

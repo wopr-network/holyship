@@ -126,6 +126,26 @@ describe("replayEntity", () => {
     const result = replayEntity(null, events, "ent-1");
     expect(result!.artifacts).toEqual({ x: 1, y: 2 });
   });
+
+  it("applies entity.artifacts_removed to clear specified keys", () => {
+    const events = [
+      makeEvent({ type: "entity.created", entityId: "ent-1", payload: { flowId: "f", initialState: "s" }, sequence: 1 }),
+      makeEvent({ type: "entity.transitioned", entityId: "ent-1", payload: { toState: "b", artifacts: { x: 1, y: 2, z: 3 } }, sequence: 2 }),
+      makeEvent({ type: "entity.artifacts_removed", entityId: "ent-1", payload: { keys: ["x", "z"] }, sequence: 3 }),
+    ];
+    const result = replayEntity(null, events, "ent-1");
+    expect(result!.artifacts).toEqual({ y: 2 });
+  });
+
+  it("entity.artifacts_removed ignores keys that do not exist", () => {
+    const events = [
+      makeEvent({ type: "entity.created", entityId: "ent-1", payload: { flowId: "f", initialState: "s" }, sequence: 1 }),
+      makeEvent({ type: "entity.transitioned", entityId: "ent-1", payload: { toState: "b", artifacts: { x: 1 } }, sequence: 2 }),
+      makeEvent({ type: "entity.artifacts_removed", entityId: "ent-1", payload: { keys: ["nonexistent"] }, sequence: 3 }),
+    ];
+    const result = replayEntity(null, events, "ent-1");
+    expect(result!.artifacts).toEqual({ x: 1 });
+  });
 });
 
 describe("replayInvocation", () => {
