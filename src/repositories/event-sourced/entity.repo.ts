@@ -71,7 +71,8 @@ export class EventSourcedEntityRepository implements IEntityRepository {
   }
 
   async removeArtifactKeys(id: string, keys: string[]): Promise<void> {
-    return this.mutable.removeArtifactKeys(id, keys);
+    await this.mutable.removeArtifactKeys(id, keys);
+    await this.domainEvents.append("entity.artifacts_removed", id, { keys });
   }
 
   async claim(flowId: string, state: string, agentId: string): Promise<Entity | null> {

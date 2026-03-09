@@ -59,6 +59,20 @@ export function replayEntity(snapshot: Entity | null, events: DomainEvent[], ent
         state.updatedAt = new Date(event.emittedAt);
         break;
       }
+      case "entity.artifacts_removed": {
+        if (!state) break;
+        const p = event.payload as Record<string, unknown>;
+        const keys = p.keys as string[];
+        if (state.artifacts && Array.isArray(keys)) {
+          const updated = { ...state.artifacts };
+          for (const key of keys) {
+            delete updated[key];
+          }
+          state.artifacts = updated;
+        }
+        state.updatedAt = new Date(event.emittedAt);
+        break;
+      }
       // invocation.*, gate.*, onEnter.*, onExit.*, flow.spawned — no entity state mutation
     }
   }
