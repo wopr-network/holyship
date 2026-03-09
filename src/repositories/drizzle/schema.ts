@@ -198,3 +198,19 @@ export const events = sqliteTable(
     emittedAtIdx: index("events_emitted_at_idx").on(table.emittedAt),
   }),
 );
+
+export const domainEvents = sqliteTable(
+  "domain_events",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(),
+    entityId: text("entity_id").notNull(),
+    payload: text("payload", { mode: "json" }).notNull(),
+    sequence: integer("sequence").notNull(),
+    emittedAt: integer("emitted_at").notNull(),
+  },
+  (table) => ({
+    entitySeqIdx: uniqueIndex("domain_events_entity_seq_idx").on(table.entityId, table.sequence),
+    typeIdx: index("domain_events_type_idx").on(table.type, table.emittedAt),
+  }),
+);
