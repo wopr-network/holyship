@@ -12,9 +12,11 @@ import { createHttpServer } from "../api/server.js";
 import { exportSeed } from "../config/exporter.js";
 import { loadSeed } from "../config/seed-loader.js";
 import { resolveCorsOrigin } from "../cors.js";
+import { DomainEventPersistAdapter } from "../engine/domain-event-adapter.js";
 import { Engine } from "../engine/engine.js";
 import { EventEmitter } from "../engine/event-emitter.js";
 import { withTransaction } from "../main.js";
+import { DrizzleDomainEventRepository } from "../repositories/drizzle/domain-event.repo.js";
 import { DrizzleEntityRepository } from "../repositories/drizzle/entity.repo.js";
 import { DrizzleEventRepository } from "../repositories/drizzle/event.repo.js";
 import { DrizzleFlowRepository } from "../repositories/drizzle/flow.repo.js";
@@ -198,12 +200,15 @@ program
     const gateRepo = new DrizzleGateRepository(db);
     const transitionLogRepo = new DrizzleTransitionLogRepository(db);
 
+    const domainEventRepo = new DrizzleDomainEventRepository(db);
+
     const eventEmitter = new EventEmitter();
     eventEmitter.register({
       emit: async (event) => {
         process.stderr.write(`[event] ${event.type} ${JSON.stringify(event)}\n`);
       },
     });
+    eventEmitter.register(new DomainEventPersistAdapter(domainEventRepo));
 
     const engine = new Engine({
       entityRepo,
@@ -223,6 +228,7 @@ program
       gates: gateRepo,
       transitions: transitionLogRepo,
       eventRepo: new DrizzleEventRepository(db),
+      domainEvents: domainEventRepo,
       engine,
       withTransaction: (fn) => withTransaction(sqlite, fn),
     };

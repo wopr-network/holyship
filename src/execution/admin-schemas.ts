@@ -163,3 +163,9 @@ export const AdminGateRerunSchema = z.object({
   entity_id: z.string().min(1),
   gate_name: z.string().min(1),
 });
+
+export const AdminEventsListSchema = z.object({
+  entity_id: z.string().min(1),
+  type: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});

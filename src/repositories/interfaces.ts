@@ -414,6 +414,25 @@ export interface IEventRepository {
   emitDefinitionChanged(flowId: string | null, tool: string, payload: Record<string, unknown>): Promise<void>;
 }
 
+/** A persisted domain event from the append-only audit log. */
+export interface DomainEvent {
+  id: string;
+  type: string;
+  entityId: string;
+  payload: Record<string, unknown>;
+  sequence: number;
+  emittedAt: number;
+}
+
+/** Data-access contract for the append-only domain_events table. */
+export interface IDomainEventRepository {
+  /** Append a domain event. Sequence is computed as max(sequence)+1 for the entity. */
+  append(type: string, entityId: string, payload: Record<string, unknown>): Promise<DomainEvent>;
+
+  /** List domain events for an entity, optionally filtered by type, ordered by sequence ascending. */
+  list(entityId: string, opts?: { type?: string; limit?: number }): Promise<DomainEvent[]>;
+}
+
 /** Data-access contract for gate definitions and result recording. */
 export interface IGateRepository {
   /** Create a new gate definition. */

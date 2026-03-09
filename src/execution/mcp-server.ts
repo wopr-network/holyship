@@ -9,6 +9,7 @@ import { isTerminal } from "../engine/state-machine.js";
 import type { Logger } from "../logger.js";
 import { consoleLogger } from "../logger.js";
 import type {
+  IDomainEventRepository,
   IEntityRepository,
   IEventRepository,
   IFlowRepository,
@@ -20,6 +21,7 @@ import {
   AdminEntityCancelSchema,
   AdminEntityMigrateSchema,
   AdminEntityResetSchema,
+  AdminEventsListSchema,
   AdminFlowCreateSchema,
   AdminFlowPauseSchema,
   AdminFlowRestoreSchema,
@@ -53,6 +55,7 @@ export interface McpServerDeps {
   gates: IGateRepository;
   transitions: ITransitionLogRepository;
   eventRepo: IEventRepository;
+  domainEvents?: IDomainEventRepository;
   engine?: Engine;
   logger?: Logger;
   withTransaction?: <T>(fn: () => T | Promise<T>) => Promise<T>;
@@ -463,6 +466,19 @@ const TOOL_DEFINITIONS = [
       required: ["entity_id", "gate_name"],
     },
   },
+  {
+    name: "admin.events.list",
+    description: "List domain events for an entity. Returns append-only audit log entries ordered by sequence.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        entity_id: { type: "string", description: "Entity ID to list events for" },
+        type: { type: "string", description: "Optional event type filter (e.g. 'entity.transitioned')" },
+        limit: { type: "number", description: "Max events to return (default 100, max 500)" },
+      },
+      required: ["entity_id"],
+    },
+  },
 ];
 
 export function createMcpServer(deps: McpServerDeps, opts?: McpServerOpts): Server {
@@ -567,6 +583,8 @@ export async function callToolHandler(
         return await handleAdminWorkerUndrain(deps, safeArgs);
       case "admin.gate.rerun":
         return await handleAdminGateRerun(deps, safeArgs);
+      case "admin.events.list":
+        return await handleAdminEventsList(deps, safeArgs);
       default:
         return errorResult(`Unknown tool: ${name}`);
     }
@@ -1260,4 +1278,16 @@ async function handleAdminFlowRestore(deps: McpServerDeps, args: Record<string, 
   await deps.flows.restore(flow.id, v.data.version);
   emitDefinitionChanged(deps.eventRepo, flow.id, "admin.flow.restore", { version: v.data.version });
   return jsonResult({ restored: true, version: v.data.version });
+}
+
+async function handleAdminEventsList(deps: McpServerDeps, args: Record<string, unknown>) {
+  if (!deps.domainEvents) {
+    return errorResult("Domain events repository not available");
+  }
+  const parsed = AdminEventsListSchema.parse(args);
+  const events = await deps.domainEvents.list(parsed.entity_id, {
+    type: parsed.type,
+    limit: parsed.limit,
+  });
+  return { content: [{ type: "text" as const, text: JSON.stringify(events, null, 2) }] };
 }
