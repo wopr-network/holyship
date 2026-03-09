@@ -212,6 +212,7 @@ program
       transitionLogRepo,
       adapters: new Map(),
       eventEmitter,
+      sqlite,
     });
 
     const deps: McpServerDeps = {

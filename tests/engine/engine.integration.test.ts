@@ -51,6 +51,7 @@ function setupEngine() {
     transitionLogRepo,
     adapters: new Map(),
     eventEmitter,
+    sqlite,
   });
 
   return {
@@ -610,6 +611,51 @@ describe("Engine integration (in-memory SQLite)", () => {
     expect(reclaimResult.isError).toBeUndefined();
     const reclaimData = JSON.parse(reclaimResult.content[0].text) as { next_action: string };
     expect(reclaimData.next_action).toBe("check_back");
+  });
+
+  it("processSignal is atomic: simulated crash rolls back all writes", async () => {
+    const seedPath = resolve(__dirname, "fixtures/simple-flow.seed.json");
+    await loadSeed(seedPath, ctx.flowRepo, ctx.gateRepo, { db: ctx.db });
+
+    const entity = await ctx.engine.createEntity("simple-pipeline");
+    expect(entity.state).toBe("backlog");
+
+    // Snapshot pre-transition state
+    const preEntity = await ctx.entityRepo.get(entity.id);
+    expect(preEntity!.state).toBe("backlog");
+    const preHistory = await ctx.transitionLogRepo.historyFor(entity.id);
+    const preInvocations = await ctx.invocationRepo.findByEntity(entity.id);
+
+    // Sabotage transitionLogRepo.record to throw mid-transaction
+    const originalRecord = ctx.transitionLogRepo.record.bind(ctx.transitionLogRepo);
+    ctx.transitionLogRepo.record = async () => {
+      throw new Error("simulated crash");
+    };
+
+    // processSignal should throw
+    await expect(ctx.engine.processSignal(entity.id, "assigned")).rejects.toThrow("simulated crash");
+
+    // Restore original
+    ctx.transitionLogRepo.record = originalRecord;
+
+    // Verify rollback: entity should still be in "backlog"
+    const postEntity = await ctx.entityRepo.get(entity.id);
+    expect(postEntity!.state).toBe("backlog");
+
+    // No new transition log entries
+    const postHistory = await ctx.transitionLogRepo.historyFor(entity.id);
+    expect(postHistory).toHaveLength(preHistory.length);
+
+    // No new invocations created
+    const postInvocations = await ctx.invocationRepo.findByEntity(entity.id);
+    expect(postInvocations).toHaveLength(preInvocations.length);
+
+    // Now do the transition for real — should succeed normally
+    const result = await ctx.engine.processSignal(entity.id, "assigned");
+    expect(result.newState).toBe("coding");
+
+    const finalEntity = await ctx.entityRepo.get(entity.id);
+    expect(finalEntity!.state).toBe("coding");
   });
 
   it("error terminal: working→error transition via fail signal", async () => {

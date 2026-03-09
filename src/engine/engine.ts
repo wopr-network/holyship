@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { NotFoundError, ValidationError } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { consoleLogger } from "../logger.js";
@@ -62,6 +63,7 @@ export interface EngineDeps {
   adapters: Map<string, unknown>;
   eventEmitter: IEventBusAdapter;
   logger?: Logger;
+  sqlite?: Database.Database;
 }
 
 export class Engine {
@@ -73,6 +75,7 @@ export class Engine {
   readonly adapters: Map<string, unknown>;
   private eventEmitter: IEventBusAdapter;
   private readonly logger: Logger;
+  private readonly sqlite: Database.Database | null;
   private drainingWorkers = new Set<string>();
 
   constructor(deps: EngineDeps) {
@@ -84,6 +87,7 @@ export class Engine {
     this.adapters = deps.adapters;
     this.eventEmitter = deps.eventEmitter;
     this.logger = deps.logger ?? consoleLogger;
+    this.sqlite = deps.sqlite ?? null;
   }
 
   drainWorker(workerId: string): void {
@@ -107,6 +111,26 @@ export class Engine {
   }
 
   async processSignal(
+    entityId: string,
+    signal: string,
+    artifacts?: Artifacts,
+    triggeringInvocationId?: string,
+  ): Promise<ProcessSignalResult> {
+    if (this.sqlite && !this.sqlite.inTransaction) {
+      this.sqlite.exec("BEGIN");
+      try {
+        const result = await this._processSignalInner(entityId, signal, artifacts, triggeringInvocationId);
+        this.sqlite.exec("COMMIT");
+        return result;
+      } catch (err) {
+        this.sqlite.exec("ROLLBACK");
+        throw err;
+      }
+    }
+    return this._processSignalInner(entityId, signal, artifacts, triggeringInvocationId);
+  }
+
+  private async _processSignalInner(
     entityId: string,
     signal: string,
     artifacts?: Artifacts,
