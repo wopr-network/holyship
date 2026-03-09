@@ -24,6 +24,7 @@ export async function executeSpawn(
     flow.id,
     flow.initialState,
     parentEntity.refs ?? undefined,
+    undefined,
     parentEntity.id,
   );
 

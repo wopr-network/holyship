@@ -91,9 +91,9 @@ describe("entity cancellation", () => {
     const childFlow = await createFlow("child-flow", ["open", "done"]);
 
     const parent = await entityRepo.create(parentFlow.id, "open");
-    const child1 = await entityRepo.create(childFlow.id, "open", undefined, parent.id);
-    const child2 = await entityRepo.create(childFlow.id, "open", undefined, parent.id);
-    const grandchild = await entityRepo.create(childFlow.id, "open", undefined, child1.id);
+    const child1 = await entityRepo.create(childFlow.id, "open", undefined, undefined, parent.id);
+    const child2 = await entityRepo.create(childFlow.id, "open", undefined, undefined, parent.id);
+    const grandchild = await entityRepo.create(childFlow.id, "open", undefined, undefined, child1.id);
 
     const result = await callToolHandler(deps, "admin.entity.cancel", {
       entity_id: parent.id,
@@ -118,7 +118,7 @@ describe("entity cancellation", () => {
     const childFlow = await createFlow("child-flow", ["open", "done"]);
 
     const parent = await entityRepo.create(parentFlow.id, "open");
-    const child = await entityRepo.create(childFlow.id, "open", undefined, parent.id);
+    const child = await entityRepo.create(childFlow.id, "open", undefined, undefined, parent.id);
 
     await callToolHandler(deps, "admin.entity.cancel", { entity_id: parent.id });
 
@@ -152,7 +152,7 @@ describe("entity cancellation", () => {
     const childFlow = await createFlow("child-flow", ["open", "done"]);
 
     const parent = await entityRepo.create(parentFlow.id, "open");
-    const child = await entityRepo.create(childFlow.id, "open", undefined, parent.id);
+    const child = await entityRepo.create(childFlow.id, "open", undefined, undefined, parent.id);
 
     expect(child.parentEntityId).toBe(parent.id);
 

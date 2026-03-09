@@ -30,7 +30,13 @@ export class DrizzleEntityRepository implements IEntityRepository {
     };
   }
 
-  async create(flowId: string, initialState: string, refs?: Refs, flowVersion?: number, parentEntityId?: string): Promise<Entity> {
+  async create(
+    flowId: string,
+    initialState: string,
+    refs?: Refs,
+    flowVersion?: number,
+    parentEntityId?: string,
+  ): Promise<Entity> {
     const now = Date.now();
     const id = crypto.randomUUID();
     const row = {

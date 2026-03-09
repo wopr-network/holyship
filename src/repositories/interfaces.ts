@@ -236,7 +236,13 @@ export interface CreateGateInput {
 /** Data-access contract for entity lifecycle operations. */
 export interface IEntityRepository {
   /** Create a new entity in the given flow's initial state. */
-  create(flowId: string, initialState: string, refs?: Refs, flowVersion?: number, parentEntityId?: string): Promise<Entity>;
+  create(
+    flowId: string,
+    initialState: string,
+    refs?: Refs,
+    flowVersion?: number,
+    parentEntityId?: string,
+  ): Promise<Entity>;
 
   /** Get an entity by ID, or null if not found. */
   get(id: string): Promise<Entity | null>;
