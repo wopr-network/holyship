@@ -15,6 +15,7 @@ import { resolveCorsOrigin } from "../cors.js";
 import { DomainEventPersistAdapter } from "../engine/domain-event-adapter.js";
 import { Engine } from "../engine/engine.js";
 import { EventEmitter } from "../engine/event-emitter.js";
+import { buildConfigFromEnv, isLitestreamEnabled, LitestreamManager } from "../litestream/manager.js";
 import { withTransaction } from "../main.js";
 import { DrizzleDomainEventRepository } from "../repositories/drizzle/domain-event.repo.js";
 import { DrizzleEntityRepository } from "../repositories/drizzle/entity.repo.js";
@@ -195,7 +196,20 @@ program
   .option("--http-host <address>", "Host for HTTP REST API", "127.0.0.1")
   .option("--ui", "Enable built-in web UI at /ui")
   .action(async (opts) => {
+    // Litestream: restore from replica if DB missing and replication configured
+    let litestreamMgr: LitestreamManager | undefined;
+    if (isLitestreamEnabled()) {
+      const lsConfig = buildConfigFromEnv(opts.db);
+      litestreamMgr = new LitestreamManager(lsConfig);
+      litestreamMgr.restore();
+    }
+
     const { db, sqlite } = openDb(opts.db);
+
+    // Litestream: start continuous replication
+    if (litestreamMgr) {
+      litestreamMgr.start();
+    }
     const entityRepo = new DrizzleEntityRepository(db);
     const flowRepo = new DrizzleFlowRepository(db);
     const invocationRepo = new DrizzleInvocationRepository(db);
@@ -411,14 +425,22 @@ program
 
       const shutdown = makeShutdownHandler({
         stopReaper,
-        closeables: [{ close: () => restHttpServer?.close() }, httpServer, sqlite],
+        closeables: [
+          ...(litestreamMgr ? [litestreamMgr] : []),
+          { close: () => restHttpServer?.close() },
+          httpServer,
+          sqlite,
+        ],
       });
       process.once("SIGINT", shutdown);
       process.once("SIGTERM", shutdown);
     } else if (startMcp) {
       // stdio (default)
       console.error("Starting MCP server on stdio...");
-      const cleanup = makeShutdownHandler({ stopReaper, closeables: [sqlite] });
+      const cleanup = makeShutdownHandler({
+        stopReaper,
+        closeables: [...(litestreamMgr ? [litestreamMgr] : []), sqlite],
+      });
       process.once("SIGINT", cleanup);
       process.once("SIGTERM", cleanup);
       const mcpOpts: McpServerOpts = { adminToken, workerToken, stdioTrusted: true };
@@ -427,7 +449,7 @@ program
       // HTTP-only mode — keep process alive
       const cleanup = makeShutdownHandler({
         stopReaper,
-        closeables: [{ close: () => restHttpServer?.close() }, sqlite],
+        closeables: [...(litestreamMgr ? [litestreamMgr] : []), { close: () => restHttpServer?.close() }, sqlite],
       });
       process.once("SIGINT", cleanup);
       process.once("SIGTERM", cleanup);
