@@ -18,6 +18,7 @@ import * as schema from "../../src/repositories/drizzle/schema.js";
 import { loadSeed } from "../../src/config/seed-loader.js";
 import { callToolHandler } from "../../src/execution/mcp-server.js";
 import type { McpServerDeps } from "../../src/execution/mcp-server.js";
+import { withTransaction as wt } from "../../src/main.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,6 +53,7 @@ function setupEngine() {
     adapters: new Map(),
     eventEmitter,
     sqlite,
+    withTransaction: (fn) => wt(sqlite, fn),
   });
 
   return {
