@@ -26,11 +26,11 @@ describe("LitestreamManager", () => {
       syncInterval: "1s",
     });
     const yaml = mgr.generateConfig();
-    expect(yaml).toContain("/data/defcon.db");
-    expect(yaml).toContain("s3://bucket/defcon.db");
-    expect(yaml).toContain("AKIA...");
-    expect(yaml).toContain("retention: 24h");
-    expect(yaml).toContain("sync-interval: 1s");
+    expect(yaml).toContain("'/data/defcon.db'");
+    expect(yaml).toContain("'s3://bucket/defcon.db'");
+    expect(yaml).not.toContain("AKIA...");
+    expect(yaml).toContain("retention: '24h'");
+    expect(yaml).toContain("sync-interval: '1s'");
   });
 
   it("generates config with custom endpoint for R2", () => {
@@ -45,6 +45,6 @@ describe("LitestreamManager", () => {
       syncInterval: "1s",
     });
     const yaml = mgr.generateConfig();
-    expect(yaml).toContain("endpoint: https://account.r2.cloudflarestorage.com");
+    expect(yaml).toContain("endpoint: 'https://account.r2.cloudflarestorage.com'");
   });
 });
