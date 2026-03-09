@@ -39,6 +39,7 @@ export interface Invocation {
   id: string;
   entityId: string;
   stage: string;
+  agentRole: string | null;
   mode: Mode;
   prompt: string;
   context: Record<string, unknown> | null;
@@ -89,6 +90,8 @@ export interface State {
   id: string;
   flowId: string;
   name: string;
+  /** Agent type identifier — maps to an agent MD file (e.g. "wopr-architect" → ~/.claude/agents/wopr-architect.md). */
+  agentRole: string | null;
   modelTier: string | null;
   mode: Mode;
   promptTemplate: string | null;
@@ -124,6 +127,10 @@ export interface Gate {
   timeoutMs: number | null;
   failurePrompt: string | null;
   timeoutPrompt: string | null;
+  /** Named outcome map from structured gate output. Keys are outcome names; values declare
+   *  where the entity goes. `proceed: true` means the original transition continues.
+   *  `toState` redirects to a different state. */
+  outcomes: Record<string, { proceed?: boolean; toState?: string }> | null;
 }
 
 /** A complete flow definition with its states and transitions */
@@ -183,6 +190,7 @@ export interface CreateFlowInput {
 /** Input for adding a state to a flow */
 export interface CreateStateInput {
   name: string;
+  agentRole?: string;
   modelTier?: string;
   mode?: Mode;
   promptTemplate?: string;
@@ -213,6 +221,7 @@ export interface CreateGateInput {
   timeoutMs?: number;
   failurePrompt?: string;
   timeoutPrompt?: string;
+  outcomes?: Record<string, { proceed?: boolean; toState?: string }>;
 }
 
 /** Data-access contract for entity lifecycle operations. */
@@ -321,8 +330,9 @@ export interface IInvocationRepository {
     stage: string,
     prompt: string,
     mode: Mode,
-    ttlMs?: number,
-    context?: Record<string, unknown>,
+    ttlMs: number | undefined,
+    context: Record<string, unknown> | undefined,
+    agentRole: string | null,
   ): Promise<Invocation>;
 
   /** Get an invocation by ID, or null if not found. */
@@ -404,7 +414,7 @@ export interface IGateRepository {
   update(
     id: string,
     changes: Partial<
-      Pick<Gate, "command" | "functionRef" | "apiConfig" | "timeoutMs" | "failurePrompt" | "timeoutPrompt">
+      Pick<Gate, "command" | "functionRef" | "apiConfig" | "timeoutMs" | "failurePrompt" | "timeoutPrompt" | "outcomes">
     >,
   ): Promise<Gate>;
 

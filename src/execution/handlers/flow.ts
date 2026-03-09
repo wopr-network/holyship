@@ -218,6 +218,7 @@ export async function handleFlowClaim(deps: McpServerDeps, args: Record<string, 
       invocation_id: claimed.id,
       flow: flow?.name ?? null,
       stage: claimed.stage,
+      agent_role: claimed.agentRole || null,
       prompt: claimed.prompt,
       context: claimed.context,
     });
@@ -292,6 +293,7 @@ export async function handleFlowReport(deps: McpServerDeps, args: Record<string,
         activeInvocation.mode,
         undefined,
         activeInvocation.context ?? undefined,
+        activeInvocation.agentRole,
       );
     }
     return errorResult(message);
@@ -326,6 +328,7 @@ export async function handleFlowReport(deps: McpServerDeps, args: Record<string,
       activeInvocation.mode,
       undefined,
       activeInvocation.context ?? undefined,
+      activeInvocation.agentRole,
     );
     const claimedBy = activeInvocation.claimedBy;
     if (claimedBy) {

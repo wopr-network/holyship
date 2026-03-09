@@ -96,6 +96,7 @@ async function parseSeedAndLoad(
         timeoutMs: g.timeoutMs,
         failurePrompt: g.failurePrompt,
         timeoutPrompt: g.timeoutPrompt,
+        outcomes: g.outcomes,
       });
       gateNameToId.set(g.name, gate.id);
     }
@@ -121,6 +122,7 @@ async function parseSeedAndLoad(
       for (const s of flowStates) {
         await flowRepo.addState(flow.id, {
           name: s.name,
+          agentRole: s.agentRole,
           modelTier: s.modelTier,
           mode: s.mode,
           promptTemplate: s.promptTemplate,
