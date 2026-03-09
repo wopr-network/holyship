@@ -188,21 +188,33 @@ export class Engine {
     // 4b. Execute onExit hook on the DEPARTING state (before transition)
     const departingStateDef = flow.states.find((s) => s.name === entity.state);
     if (departingStateDef?.onExit) {
-      const onExitResult = await executeOnExit(departingStateDef.onExit, entity);
-      if (onExitResult.error) {
-        this.logger.warn(`[engine] onExit failed for entity ${entityId} state ${entity.state}: ${onExitResult.error}`);
+      try {
+        const onExitResult = await executeOnExit(departingStateDef.onExit, entity);
+        if (onExitResult.error) {
+          this.logger.warn(`[engine] onExit failed for entity ${entityId} state ${entity.state}: ${onExitResult.error}`);
+          await this.eventEmitter.emit({
+            type: "onExit.failed",
+            entityId,
+            state: entity.state,
+            error: onExitResult.error,
+            emittedAt: new Date(),
+          });
+        } else {
+          await this.eventEmitter.emit({
+            type: "onExit.completed",
+            entityId,
+            state: entity.state,
+            emittedAt: new Date(),
+          });
+        }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`[engine] onExit threw unexpectedly for entity ${entityId} state ${entity.state}: ${error}`);
         await this.eventEmitter.emit({
           type: "onExit.failed",
           entityId,
           state: entity.state,
-          error: onExitResult.error,
-          emittedAt: new Date(),
-        });
-      } else {
-        await this.eventEmitter.emit({
-          type: "onExit.completed",
-          entityId,
-          state: entity.state,
+          error,
           emittedAt: new Date(),
         });
       }
