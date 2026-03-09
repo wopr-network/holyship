@@ -29,7 +29,7 @@ export class DrizzleEntityRepository implements IEntityRepository {
     };
   }
 
-  async create(flowId: string, initialState: string, refs?: Refs): Promise<Entity> {
+  async create(flowId: string, initialState: string, refs?: Refs, flowVersion?: number): Promise<Entity> {
     const now = Date.now();
     const id = crypto.randomUUID();
     const row = {
@@ -40,7 +40,7 @@ export class DrizzleEntityRepository implements IEntityRepository {
       artifacts: null,
       claimedBy: null,
       claimedAt: null,
-      flowVersion: 1,
+      flowVersion: flowVersion ?? 1,
       createdAt: now,
       updatedAt: now,
       affinityWorkerId: null,
@@ -231,5 +231,12 @@ export class DrizzleEntityRepository implements IEntityRepository {
     const rows = await this.db.select().from(entities).where(eq(entities.id, entityId)).limit(1);
     if (rows.length === 0) throw new NotFoundError(`Entity not found: ${entityId}`);
     return this.toEntity(rows[0]);
+  }
+
+  async updateFlowVersion(entityId: string, version: number): Promise<void> {
+    await this.db
+      .update(entities)
+      .set({ flowVersion: version, updatedAt: Date.now() })
+      .where(eq(entities.id, entityId));
   }
 }

@@ -235,7 +235,7 @@ export interface CreateGateInput {
 /** Data-access contract for entity lifecycle operations. */
 export interface IEntityRepository {
   /** Create a new entity in the given flow's initial state. */
-  create(flowId: string, initialState: string, refs?: Refs): Promise<Entity>;
+  create(flowId: string, initialState: string, refs?: Refs, flowVersion?: number): Promise<Entity>;
 
   /** Get an entity by ID, or null if not found. */
   get(id: string): Promise<Entity | null>;
@@ -280,6 +280,9 @@ export interface IEntityRepository {
 
   /** Move entity to targetState and clear claimedBy/claimedAt. Returns the updated entity. */
   resetEntity(entityId: string, targetState: string): Promise<Entity>;
+
+  /** Update an entity's pinned flow version. */
+  updateFlowVersion(entityId: string, version: number): Promise<void>;
 }
 
 /** Fields that can be updated on a flow's top-level definition */
@@ -304,6 +307,9 @@ export interface IFlowRepository {
 
   /** Get a flow by unique name. Returns null if not found. */
   getByName(name: string): Promise<Flow | null>;
+
+  /** Load a flow definition at a specific version. Returns the snapshot if version < current, or live flow if version === current. */
+  getAtVersion(flowId: string, version: number): Promise<Flow | null>;
 
   /** Update a flow's top-level fields. */
   update(id: string, changes: UpdateFlowInput): Promise<Flow>;

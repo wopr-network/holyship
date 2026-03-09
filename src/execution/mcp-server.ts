@@ -18,6 +18,7 @@ import type {
 } from "../repositories/interfaces.js";
 import {
   AdminEntityCancelSchema,
+  AdminEntityMigrateSchema,
   AdminEntityResetSchema,
   AdminFlowCreateSchema,
   AdminFlowPauseSchema,
@@ -428,6 +429,12 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "admin.entity.migrate",
+    description:
+      "Migrate an entity to the latest flow version. Validates that the entity's current state exists in the new version.",
+    inputSchema: { type: "object" as const, properties: { entity_id: { type: "string" } }, required: ["entity_id"] },
+  },
+  {
     name: "admin.worker.drain",
     description: "Mark a worker as draining — claimWork() will skip it.",
     inputSchema: { type: "object" as const, properties: { worker_id: { type: "string" } }, required: ["worker_id"] },
@@ -542,6 +549,8 @@ export async function callToolHandler(
         return await handleAdminEntityCancel(deps, safeArgs);
       case "admin.entity.reset":
         return await handleAdminEntityReset(deps, safeArgs);
+      case "admin.entity.migrate":
+        return await handleAdminEntityMigrate(deps, safeArgs);
       case "admin.worker.drain":
         return await handleAdminWorkerDrain(deps, safeArgs);
       case "admin.worker.undrain":
@@ -922,6 +931,37 @@ async function handleAdminEntityReset(deps: McpServerDeps, args: Record<string, 
     timestamp: new Date(),
   });
   return jsonResult({ reset: true, entity_id: v.data.entity_id, state: updated.state });
+}
+
+async function handleAdminEntityMigrate(deps: McpServerDeps, args: Record<string, unknown>) {
+  const v = validateInput(AdminEntityMigrateSchema, args);
+  if (!v.ok) return v.result;
+  const { entity_id: entityId } = v.data;
+
+  const entity = await deps.entities.get(entityId);
+  if (!entity) return errorResult(`Entity not found: ${entityId}`);
+
+  const flow = await deps.flows.get(entity.flowId);
+  if (!flow) return errorResult(`Flow not found: ${entity.flowId}`);
+
+  if (entity.flowVersion === flow.version) {
+    return jsonResult({
+      migrated: false,
+      message: "Entity is already on the latest version",
+      flowVersion: flow.version,
+    });
+  }
+
+  const stateExists = flow.states.some((s) => s.name === entity.state);
+  if (!stateExists) {
+    return errorResult(
+      `Cannot migrate entity ${entityId}: current state '${entity.state}' does not exist in flow '${flow.name}' version ${flow.version}`,
+    );
+  }
+
+  await deps.entities.updateFlowVersion(entityId, flow.version);
+  const updated = await deps.entities.get(entityId);
+  return jsonResult(updated);
 }
 
 async function handleAdminWorkerDrain(deps: McpServerDeps, args: Record<string, unknown>) {
