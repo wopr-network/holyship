@@ -416,8 +416,17 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "admin.entity.cancel",
-    description: "Cancel an entity — fails active invocation, moves to 'cancelled' terminal state.",
-    inputSchema: { type: "object" as const, properties: { entity_id: { type: "string" } }, required: ["entity_id"] },
+    description:
+      "Cancel an entity — fails active invocation, moves to 'cancelled' terminal state. Use cascade to cancel all descendant entities.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        entity_id: { type: "string" },
+        cascade: { type: "boolean", description: "Recursively cancel all child entities" },
+        reason: { type: "string", description: "Cancellation reason" },
+      },
+      required: ["entity_id"],
+    },
   },
   {
     name: "admin.entity.reset",
@@ -882,28 +891,61 @@ async function handleAdminFlowResume(deps: McpServerDeps, args: Record<string, u
 async function handleAdminEntityCancel(deps: McpServerDeps, args: Record<string, unknown>) {
   const v = validateInput(AdminEntityCancelSchema, args);
   if (!v.ok) return v.result;
-  const entity = await deps.entities.get(v.data.entity_id);
-  if (!entity) return errorResult(`Entity not found: ${v.data.entity_id}`);
-  const flow = await deps.flows.get(entity.flowId);
-  if (!flow) return errorResult(`Flow not found for entity: ${v.data.entity_id}`);
-  const cancelledState = flow.states.find((s) => s.name === "cancelled");
-  if (!cancelledState) return errorResult(`State 'cancelled' not found in flow '${flow.name}'`);
-  const invocations = await deps.invocations.findByEntity(v.data.entity_id);
-  for (const inv of invocations) {
-    if (inv.completedAt === null && inv.failedAt === null) {
-      await deps.invocations.fail(inv.id, "Cancelled by admin");
+  const { entity_id, cascade, reason } = v.data;
+
+  const entity = await deps.entities.get(entity_id);
+  if (!entity) return errorResult(`Entity not found: ${entity_id}`);
+  if (entity.state === "cancelled") return errorResult(`Entity ${entity_id} is already cancelled`);
+
+  const cancelled: string[] = [];
+
+  async function cancelOne(eid: string): Promise<void> {
+    const e = eid === entity_id ? entity : await deps.entities.get(eid);
+    if (!e || e.state === "cancelled") return;
+
+    const invocations = await deps.invocations.findByEntity(eid);
+    for (const inv of invocations) {
+      if (inv.completedAt === null && inv.failedAt === null) {
+        await deps.invocations.fail(inv.id, reason ?? "Cancelled by admin");
+      }
+    }
+
+    await deps.entities.cancelEntity(eid);
+
+    await deps.transitions.record({
+      entityId: eid,
+      fromState: e.state,
+      toState: "cancelled",
+      trigger: "admin.cancel",
+      invocationId: null,
+      timestamp: new Date(),
+    });
+
+    if (deps.engine) {
+      await deps.engine.emit({
+        type: "entity.cancelled",
+        entityId: eid,
+        flowId: e.flowId,
+        cancelledBy: "admin",
+        reason: reason ?? null,
+        cascade: cascade ?? false,
+        emittedAt: new Date(),
+      });
+    }
+
+    cancelled.push(eid);
+
+    if (cascade) {
+      const children = await deps.entities.findByParentId(eid);
+      for (const child of children) {
+        await cancelOne(child.id);
+      }
     }
   }
-  await deps.entities.cancelEntity(v.data.entity_id);
-  await deps.transitions.record({
-    entityId: v.data.entity_id,
-    fromState: entity.state,
-    toState: "cancelled",
-    trigger: "admin.cancel",
-    invocationId: null,
-    timestamp: new Date(),
-  });
-  return jsonResult({ cancelled: true, entity_id: v.data.entity_id });
+
+  await cancelOne(entity_id);
+
+  return jsonResult({ cancelled: true, entity_id, cancelled_count: cancelled.length, cancelled_ids: cancelled });
 }
 
 async function handleAdminEntityReset(deps: McpServerDeps, args: Record<string, unknown>) {
