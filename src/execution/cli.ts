@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 import { Command } from "commander";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { startHonoServer, HonoSseAdapter as UiSseAdapter } from "../api/hono-server.js";
+import { DB_PATH } from "../config/db-path.js";
 import { exportSeed } from "../config/exporter.js";
 import { loadSeed } from "../config/seed-loader.js";
 import { resolveCorsOrigin } from "../cors.js";
@@ -43,12 +43,11 @@ import type { IEntityRepository, IInvocationRepository } from "../repositories/i
 import { WebSocketBroadcaster } from "../ws/broadcast.js";
 import type { McpServerDeps, McpServerOpts } from "./mcp-server.js";
 import { createMcpServer, startStdioServer } from "./mcp-server.js";
-import { provisionWorktree } from "./provision-worktree.js";
 
-const DB_DEFAULT = process.env.DEFCON_DB_PATH ?? "./defcon.db";
+const DB_DEFAULT = DB_PATH;
 
 /**
- * Validates that DEFCON_ADMIN_TOKEN is set when network transports are active.
+ * Validates that SILO_ADMIN_TOKEN is set when network transports are active.
  * Throws if a network transport (HTTP or SSE) is started without a token.
  * Stdio-only mode is exempt (local, single-user).
  */
@@ -62,15 +61,15 @@ export function validateAdminToken(opts: {
   const networkActive = opts.startHttp || transport === "sse";
   if (networkActive && !token) {
     throw new Error(
-      "DEFCON_ADMIN_TOKEN must be set when using HTTP or SSE transport. " +
+      "SILO_ADMIN_TOKEN must be set when using HTTP or SSE transport. " +
         "Admin tools are accessible over the network and require authentication. " +
-        "Set DEFCON_ADMIN_TOKEN in your environment or use stdio transport for local-only access.",
+        "Set SILO_ADMIN_TOKEN in your environment or use stdio transport for local-only access.",
     );
   }
 }
 
 /**
- * Validates that DEFCON_WORKER_TOKEN is set when network transports are active.
+ * Validates that SILO_WORKER_TOKEN is set when network transports are active.
  * Throws if a network transport (HTTP or SSE) is started without a token.
  * Stdio-only mode is exempt (local, single-user).
  */
@@ -84,9 +83,9 @@ export function validateWorkerToken(opts: {
   const networkActive = opts.startHttp || transport === "sse";
   if (networkActive && !token) {
     throw new Error(
-      "DEFCON_WORKER_TOKEN must be set when using HTTP or SSE transport. " +
+      "SILO_WORKER_TOKEN must be set when using HTTP or SSE transport. " +
         "Worker tools (flow.*) are accessible over the network and require authentication. " +
-        "Set DEFCON_WORKER_TOKEN in your environment or use stdio transport for local-only access.",
+        "Set SILO_WORKER_TOKEN in your environment or use stdio transport for local-only access.",
     );
   }
 }
@@ -149,7 +148,7 @@ program
       db.delete(flowDefinitions).run();
     }
 
-    const seedRoot = process.env.DEFCON_SEED_ROOT;
+    const seedRoot = process.env.SILO_SEED_ROOT;
     const result = await loadSeed(resolve(seedPath), flowRepo, gateRepo, {
       allowedRoot: seedRoot ?? process.cwd(),
       db,
@@ -221,8 +220,8 @@ program
 
     const domainEventRepo = new DrizzleDomainEventRepository(db);
 
-    const useEventSourced = process.env.DEFCON_EVENT_SOURCED === "true";
-    const snapshotInterval = parseInt(process.env.DEFCON_SNAPSHOT_INTERVAL ?? "10", 10);
+    const useEventSourced = process.env.SILO_EVENT_SOURCED === "true";
+    const snapshotInterval = parseInt(process.env.SILO_SNAPSHOT_INTERVAL ?? "10", 10);
 
     let entityRepo: IEntityRepository;
     let invocationRepo: IInvocationRepository;
@@ -290,8 +289,8 @@ program
       process.exit(1);
     }
 
-    const adminToken = process.env.DEFCON_ADMIN_TOKEN || undefined;
-    const workerToken = process.env.DEFCON_WORKER_TOKEN || undefined;
+    const adminToken = process.env.SILO_ADMIN_TOKEN || undefined;
+    const workerToken = process.env.SILO_WORKER_TOKEN || undefined;
 
     const startHttp = !opts.mcpOnly;
     const startMcp = !opts.httpOnly;
@@ -324,7 +323,7 @@ program
       const httpHost = opts.httpHost as string;
       let restCorsResult: ReturnType<typeof resolveCorsOrigin>;
       try {
-        restCorsResult = resolveCorsOrigin({ host: httpHost, corsEnv: process.env.DEFCON_CORS_ORIGIN });
+        restCorsResult = resolveCorsOrigin({ host: httpHost, corsEnv: process.env.SILO_CORS_ORIGIN });
       } catch (err: unknown) {
         console.error((err as Error).message);
         await stopReaper();
@@ -373,7 +372,7 @@ program
       const host = opts.host as string;
       let corsResult: ReturnType<typeof resolveCorsOrigin>;
       try {
-        corsResult = resolveCorsOrigin({ host, corsEnv: process.env.DEFCON_CORS_ORIGIN });
+        corsResult = resolveCorsOrigin({ host, corsEnv: process.env.SILO_CORS_ORIGIN });
       } catch (err: unknown) {
         console.error((err as Error).message);
         await stopReaper();
@@ -384,7 +383,7 @@ program
       const loopbackPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
       const httpServer = http.createServer(async (req, res) => {
-        // CORS: restrict to localhost origins when bound to loopback; require DEFCON_CORS_ORIGIN when bound to non-loopback
+        // CORS: restrict to localhost origins when bound to loopback; require SILO_CORS_ORIGIN when bound to non-loopback
         const origin = req.headers.origin;
         if (origin) {
           const originAllowed = allowedOriginSet ? allowedOriginSet.has(origin) : loopbackPattern.test(origin);
@@ -533,31 +532,6 @@ program
     }
 
     sqlite.close();
-  });
-
-// ─── provision-worktree ───
-// TODO(WOP-2014): Remove this subcommand once nuke containers are deployed and stable.
-// Nuke workers provision their own workspace inside the container, making this unnecessary.
-program
-  .command("provision-worktree")
-  .description("[DEPRECATED] Provision a git worktree and branch for an issue (superseded by nuke containers)")
-  .argument("<repo>", "GitHub repo (e.g. wopr-network/defcon)")
-  .argument("<issue-key>", "Issue key (e.g. WOP-392)")
-  .option("--base-path <path>", "Worktree base directory", join(homedir(), "worktrees"))
-  .option("--clone-root <path>", "Directory where repos are cloned", homedir())
-  .action((repo: string, issueKey: string, opts: { basePath: string; cloneRoot: string }) => {
-    try {
-      const result = provisionWorktree({
-        repo,
-        issueKey,
-        basePath: opts.basePath,
-        cloneRoot: opts.cloneRoot,
-      });
-      process.stdout.write(`${JSON.stringify(result)}\n`);
-    } catch (err) {
-      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    }
   });
 
 /**
