@@ -454,7 +454,7 @@ function esc(s) {
 
 // ── Init ─────────────────────────────────────────────────────────
 
-const savedToken = sessionStorage.getItem('silo-token');
+const savedToken = sessionStorage.getItem('silo-token') || sessionStorage.getItem('defcon-token');
 if (savedToken) {
   TOKEN = savedToken;
   document.getElementById('token-input').value = savedToken;
