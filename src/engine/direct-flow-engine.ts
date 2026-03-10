@@ -69,6 +69,24 @@ export class DirectFlowEngine implements IFlowEngine {
     const prompt = invocation?.prompt ?? "";
     const context = invocation?.context ?? null;
 
+    // Look up state config for modelTier and agentRole using the entity's
+    // pinned flow version (not latest) so values match the prompt version.
+    let model_tier: string | undefined;
+    let agent_role: string | undefined;
+    if (result.flowName && result.stage) {
+      const entity = await this.entities.get(result.entityId);
+      if (entity) {
+        const flowDef = await this.flows.getAtVersion(entity.flowId, entity.flowVersion);
+        if (flowDef) {
+          const state = flowDef.states.find((s) => s.name === result.stage);
+          if (state) {
+            model_tier = state.modelTier ?? undefined;
+            agent_role = state.agentRole ?? undefined;
+          }
+        }
+      }
+    }
+
     return {
       worker_id: workerId,
       entity_id: result.entityId,
@@ -77,6 +95,8 @@ export class DirectFlowEngine implements IFlowEngine {
       stage: result.stage,
       prompt,
       context,
+      ...(model_tier ? { model_tier } : {}),
+      ...(agent_role ? { agent_role } : {}),
     };
   }
 
@@ -203,12 +223,54 @@ export class DirectFlowEngine implements IFlowEngine {
     }
 
     if (nextAction === "continue") {
+      // Auto-claim the next invocation for the same worker so the RunLoop
+      // can report against it without a separate claim round-trip.
+      // If claim fails, fall back to waiting — the RunLoop will re-claim.
+      let claimed = false;
+      if (result.invocationId && workerId) {
+        try {
+          const claimResult = await this.invocations.claim(result.invocationId, workerId);
+          claimed = claimResult !== null;
+        } catch (err) {
+          this.logger.warn(`[direct-engine] auto-claim failed for invocation ${result.invocationId}`, err);
+        }
+      }
+
+      if (!claimed) {
+        return {
+          next_action: "completed",
+          new_state: result.newState ?? "",
+          gates_passed: result.gatesPassed,
+          prompt: null,
+          context: null,
+        };
+      }
+
+      // Look up model_tier and agent_role for the new state using the entity's
+      // pinned flow version so values stay consistent with the prompt.
+      let next_model_tier: string | undefined;
+      let next_agent_role: string | undefined;
+      if (result.newState) {
+        const entity = await this.entities.get(entityId);
+        if (entity) {
+          const flow = await this.flows.getAtVersion(entity.flowId, entity.flowVersion);
+          if (flow) {
+            const newStateDef = flow.states.find((s) => s.name === result.newState);
+            if (newStateDef) {
+              next_model_tier = newStateDef.modelTier ?? undefined;
+              next_agent_role = newStateDef.agentRole ?? undefined;
+            }
+          }
+        }
+      }
       return {
         next_action: "continue",
         new_state: result.newState ?? "",
         gates_passed: result.gatesPassed,
         prompt: nextPrompt,
         context: nextContext,
+        ...(next_model_tier ? { model_tier: next_model_tier } : {}),
+        ...(next_agent_role ? { agent_role: next_agent_role } : {}),
       };
     }
 
