@@ -84,6 +84,8 @@ async function parseSeedAndLoad(
         command: "command" in g ? g.command : undefined,
         functionRef: "functionRef" in g ? g.functionRef : undefined,
         apiConfig: "apiConfig" in g ? g.apiConfig : undefined,
+        primitiveOp: "primitiveOp" in g ? g.primitiveOp : undefined,
+        primitiveParams: "primitiveParams" in g ? g.primitiveParams : undefined,
         timeoutMs: g.timeoutMs,
         failurePrompt: g.failurePrompt,
         timeoutPrompt: g.timeoutPrompt,

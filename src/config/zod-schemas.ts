@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { validateGateCommand } from "../engine/gate-command-validator.js";
 import { validateTemplate } from "../engine/handlebars.js";
+import { PRIMITIVE_OPS } from "../integrations/types.js";
 
 // ─── Leaf Schemas ───
 
@@ -106,10 +107,17 @@ export const ApiGateSchema = BaseGateSchema.extend({
   apiConfig: z.record(z.string(), z.unknown()),
 });
 
+export const PrimitiveGateSchema = BaseGateSchema.extend({
+  type: z.literal("primitive"),
+  primitiveOp: z.enum(PRIMITIVE_OPS),
+  primitiveParams: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const GateDefinitionSchema = z.discriminatedUnion("type", [
   CommandGateSchema,
   FunctionGateSchema,
   ApiGateSchema,
+  PrimitiveGateSchema,
 ]);
 
 export const TransitionRuleSchema = z.object({

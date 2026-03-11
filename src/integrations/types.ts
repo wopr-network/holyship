@@ -132,22 +132,34 @@ export interface IVcsAdapter {
     params: { repo: string; branch: string; basePath?: string },
     signal?: AbortSignal,
   ): Promise<PrimitiveOpResult>;
+
+  /**
+   * Trigger an auto-merge (squash) and poll until the PR is merged, closed, or timed out.
+   * Returns: { outcome: "merged" | "closed" | "blocked" }
+   * "blocked" means the gate timed out before the PR resolved.
+   */
+  mergePr(params: { repo: string; prNumber: string | number }, signal?: AbortSignal): Promise<PrimitiveOpResult>;
 }
 
 // ─── Op Registry ───
 
+/** Single source of truth for all primitive op names. */
+export const PRIMITIVE_OPS = [
+  "issue_tracker.comment_exists",
+  "issue_tracker.fetch_comment",
+  "issue_tracker.post_comment",
+  "issue_tracker.issue_state",
+  "vcs.ci_status",
+  "vcs.pr_status",
+  "vcs.pr_merge_queue_status",
+  "vcs.fetch_pr_diff",
+  "vcs.fetch_pr_comments",
+  "vcs.provision_worktree",
+  "vcs.merge_pr",
+] as const;
+
 /** All ops across all categories, namespaced. */
-export type PrimitiveOp =
-  | "issue_tracker.comment_exists"
-  | "issue_tracker.fetch_comment"
-  | "issue_tracker.post_comment"
-  | "issue_tracker.issue_state"
-  | "vcs.ci_status"
-  | "vcs.pr_status"
-  | "vcs.pr_merge_queue_status"
-  | "vcs.fetch_pr_diff"
-  | "vcs.fetch_pr_comments"
-  | "vcs.provision_worktree";
+export type PrimitiveOp = (typeof PRIMITIVE_OPS)[number];
 
 export function opCategory(op: PrimitiveOp): IntegrationCategory {
   const prefix = op.split(".")[0];

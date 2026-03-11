@@ -45,6 +45,18 @@ export async function exportSeed(flowRepo: IFlowRepository, gateRepo: IGateRepos
         apiConfig: gate.apiConfig,
         timeoutMs: gate.timeoutMs ?? undefined,
       });
+    } else if (gate.type === "primitive" && gate.primitiveOp) {
+      gateEntries.push({
+        name: gate.name,
+        type: "primitive",
+        // biome-ignore lint/suspicious/noExplicitAny: primitiveOp is validated by zod on load
+        primitiveOp: gate.primitiveOp as any,
+        primitiveParams: gate.primitiveParams ?? undefined,
+        timeoutMs: gate.timeoutMs ?? undefined,
+        failurePrompt: gate.failurePrompt ?? undefined,
+        timeoutPrompt: gate.timeoutPrompt ?? undefined,
+        outcomes: gate.outcomes ?? undefined,
+      });
     }
   }
 
