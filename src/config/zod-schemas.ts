@@ -106,10 +106,28 @@ export const ApiGateSchema = BaseGateSchema.extend({
   apiConfig: z.record(z.string(), z.unknown()),
 });
 
+export const PrimitiveGateSchema = BaseGateSchema.extend({
+  type: z.literal("primitive"),
+  primitiveOp: z.enum([
+    "issue_tracker.comment_exists",
+    "issue_tracker.fetch_comment",
+    "issue_tracker.post_comment",
+    "issue_tracker.issue_state",
+    "vcs.ci_status",
+    "vcs.pr_status",
+    "vcs.pr_merge_queue_status",
+    "vcs.fetch_pr_diff",
+    "vcs.fetch_pr_comments",
+    "vcs.provision_worktree",
+  ]),
+  primitiveParams: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const GateDefinitionSchema = z.discriminatedUnion("type", [
   CommandGateSchema,
   FunctionGateSchema,
   ApiGateSchema,
+  PrimitiveGateSchema,
 ]);
 
 export const TransitionRuleSchema = z.object({
