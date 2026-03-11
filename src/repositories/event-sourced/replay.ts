@@ -59,6 +59,13 @@ export function replayEntity(snapshot: Entity | null, events: DomainEvent[], ent
         state.updatedAt = new Date(event.emittedAt);
         break;
       }
+      case "entity.artifacts_updated": {
+        if (!state) break;
+        const p = event.payload as Record<string, unknown>;
+        state.artifacts = { ...(state.artifacts ?? {}), ...p };
+        state.updatedAt = new Date(event.emittedAt);
+        break;
+      }
       case "entity.artifacts_removed": {
         if (!state) break;
         const p = event.payload as Record<string, unknown>;
