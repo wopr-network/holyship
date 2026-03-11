@@ -190,6 +190,9 @@ export class GitHubVcsAdapter implements IVcsAdapter {
       signal,
     });
 
+    // Direct merge succeeded — PR is already merged
+    if (mergeRes.ok) return { outcome: "merged" };
+
     // 405 = cannot merge yet (CI pending or conflicts); enable auto-merge via GraphQL
     if (mergeRes.status === 405) {
       const [owner, repoName] = repo.split("/");

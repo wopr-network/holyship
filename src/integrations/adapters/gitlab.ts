@@ -152,7 +152,11 @@ export class GitLabVcsAdapter implements IVcsAdapter {
         signal,
       },
     );
-    if (!mergeRes.ok && mergeRes.status !== 405 && mergeRes.status !== 406) {
+    if (mergeRes.ok) {
+      // 200 means merged immediately (pipeline was already passing)
+      const body = (await mergeRes.json()) as { state?: string };
+      if (body.state === "merged") return { outcome: "merged" };
+    } else if (mergeRes.status !== 405 && mergeRes.status !== 406) {
       throw new Error(`GitLab API error ${mergeRes.status} triggering merge`);
     }
 
