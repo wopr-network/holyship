@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { validateGateCommand } from "../engine/gate-command-validator.js";
 import { validateTemplate } from "../engine/handlebars.js";
+import { PRIMITIVE_OPS } from "../integrations/types.js";
 
 // ─── Leaf Schemas ───
 
@@ -108,19 +109,7 @@ export const ApiGateSchema = BaseGateSchema.extend({
 
 export const PrimitiveGateSchema = BaseGateSchema.extend({
   type: z.literal("primitive"),
-  primitiveOp: z.enum([
-    "issue_tracker.comment_exists",
-    "issue_tracker.fetch_comment",
-    "issue_tracker.post_comment",
-    "issue_tracker.issue_state",
-    "vcs.ci_status",
-    "vcs.pr_status",
-    "vcs.pr_merge_queue_status",
-    "vcs.fetch_pr_diff",
-    "vcs.fetch_pr_comments",
-    "vcs.provision_worktree",
-    "vcs.merge_pr",
-  ]),
+  primitiveOp: z.enum(PRIMITIVE_OPS),
   primitiveParams: z.record(z.string(), z.unknown()).optional(),
 });
 

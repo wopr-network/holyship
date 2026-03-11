@@ -173,9 +173,11 @@ export class GitLabVcsAdapter implements IVcsAdapter {
         );
       });
 
-    while (!signal?.aborted) {
+    const MAX_POLL_MS = 30 * 60 * 1000; // 30 minutes
+    const deadline = Date.now() + MAX_POLL_MS;
+    while (!signal?.aborted && Date.now() < deadline) {
       await sleep(30_000);
-      if (signal?.aborted) break;
+      if (signal?.aborted || Date.now() >= deadline) break;
       const res = await fetch(`${this.baseUrl}/api/v4/projects/${this.encodedRepo(repo)}/merge_requests/${prNumber}`, {
         headers: this.headers,
         signal,
