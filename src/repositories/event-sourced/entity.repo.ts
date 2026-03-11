@@ -67,7 +67,8 @@ export class EventSourcedEntityRepository implements IEntityRepository {
   }
 
   async updateArtifacts(id: string, artifacts: Partial<Artifacts>): Promise<void> {
-    return this.mutable.updateArtifacts(id, artifacts);
+    await this.mutable.updateArtifacts(id, artifacts);
+    await this.domainEvents.append("entity.artifacts_updated", id, artifacts as Record<string, unknown>);
   }
 
   async removeArtifactKeys(id: string, keys: string[]): Promise<void> {
