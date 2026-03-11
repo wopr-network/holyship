@@ -237,12 +237,12 @@ export class DirectFlowEngine implements IFlowEngine {
       }
 
       if (!claimed) {
+        // Auto-claim didn't stick (race condition). Signal check_back so the
+        // RunLoop re-dispatches and picks up the entity's new invocation normally.
         return {
-          next_action: "completed",
-          new_state: result.newState ?? "",
-          gates_passed: result.gatesPassed,
-          prompt: null,
-          context: null,
+          next_action: "check_back",
+          message: "auto-claim race on continue — retry",
+          retry_after_ms: 100,
         };
       }
 
