@@ -62,6 +62,7 @@ export async function createTestApp(opts?: {
     transitions: repos.transitionLog,
     eventRepo: repos.events,
     domainEvents: repos.domainEvents,
+    integrations: repos.integrations,
     engine,
   };
 

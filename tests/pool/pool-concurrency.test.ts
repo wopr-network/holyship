@@ -52,13 +52,12 @@ describe("Pool — basic operations", () => {
     expect(() => pool.complete("nonexistent", { signal: "done", artifacts: {}, exitCode: 0 })).toThrow();
   });
 
-  it("heartbeat updates lastHeartbeat", () => {
+  it("heartbeat updates lastHeartbeat", async () => {
     const pool = new Pool(2);
     pool.allocate("s1", "w1", "eng", "e1", "do stuff");
     const before = pool.activeSlots()[0].lastHeartbeat;
     // Wait a tick to ensure Date.now() changes
-    const start = Date.now();
-    while (Date.now() === start) { /* spin */ }
+    await new Promise<void>((r) => setTimeout(r, 1));
     pool.heartbeat("s1");
     const after = pool.activeSlots()[0].lastHeartbeat;
     expect(after).toBeGreaterThanOrEqual(before);
