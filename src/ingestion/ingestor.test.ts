@@ -13,7 +13,7 @@ function makeEntityMapRepo(overrides: Partial<Record<keyof IEntityMapRepository,
   } as IEntityMapRepository;
 }
 
-function makeSiloClient(overrides: Partial<Record<string, unknown>> = {}): SiloClient {
+function makeSiloClient(overrides: Partial<Record<keyof SiloClient, unknown>> = {}): SiloClient {
   return {
     createEntity: vi.fn().mockResolvedValue({ id: "entity-001" }),
     report: vi.fn().mockResolvedValue({ next_action: "continue", new_state: "working", prompt: null, context: null }),
@@ -104,6 +104,8 @@ describe("Ingestor", () => {
       const ingestor = new Ingestor(repo, silo);
 
       await expect(ingestor.ingest({ sourceId: "linear", type: "new", flowName: "eng" })).rejects.toThrow();
+
+      expect(repo.insertIfAbsent).not.toHaveBeenCalled();
     });
 
     it("rejects payload missing type", async () => {
@@ -112,6 +114,8 @@ describe("Ingestor", () => {
       const ingestor = new Ingestor(repo, silo);
 
       await expect(ingestor.ingest({ sourceId: "linear", externalId: "X", flowName: "eng" })).rejects.toThrow();
+
+      expect(repo.insertIfAbsent).not.toHaveBeenCalled();
     });
 
     it("rejects payload missing flowName", async () => {
@@ -120,6 +124,8 @@ describe("Ingestor", () => {
       const ingestor = new Ingestor(repo, silo);
 
       await expect(ingestor.ingest({ sourceId: "linear", externalId: "X", type: "new" })).rejects.toThrow();
+
+      expect(repo.insertIfAbsent).not.toHaveBeenCalled();
     });
 
     it("rejects payload with invalid type value", async () => {
@@ -135,6 +141,8 @@ describe("Ingestor", () => {
           flowName: "eng",
         }),
       ).rejects.toThrow();
+
+      expect(repo.insertIfAbsent).not.toHaveBeenCalled();
     });
 
     it("rejects empty string sourceId", async () => {
@@ -150,6 +158,8 @@ describe("Ingestor", () => {
           flowName: "eng",
         }),
       ).rejects.toThrow();
+
+      expect(repo.insertIfAbsent).not.toHaveBeenCalled();
     });
 
     it("rejects non-object input", async () => {
@@ -160,6 +170,8 @@ describe("Ingestor", () => {
       await expect(ingestor.ingest("not an object")).rejects.toThrow();
       await expect(ingestor.ingest(null)).rejects.toThrow();
       await expect(ingestor.ingest(42)).rejects.toThrow();
+
+      expect(repo.insertIfAbsent).not.toHaveBeenCalled();
     });
   });
 
@@ -184,6 +196,31 @@ describe("Ingestor", () => {
   });
 
   describe("ingest() — error handling", () => {
+    it("re-throws when updateEntityId succeeds but silo.report fails", async () => {
+      const repo = makeEntityMapRepo();
+      const silo = makeSiloClient({
+        report: vi.fn().mockRejectedValue(new Error("flow.report failed: 503")),
+      });
+      const ingestor = new Ingestor(repo, silo);
+
+      await expect(
+        ingestor.ingest({
+          sourceId: "linear",
+          externalId: "WOP-100",
+          type: "new",
+          flowName: "engineering",
+          signal: "start",
+        }),
+      ).rejects.toThrow("flow.report failed: 503");
+
+      expect(repo.updateEntityId).toHaveBeenCalledWith("linear", "WOP-100", "entity-001");
+      expect(silo.report).toHaveBeenCalledWith({
+        entityId: "entity-001",
+        signal: "start",
+        artifacts: {},
+      });
+    });
+
     it("cleans up sentinel and re-throws when createEntity fails", async () => {
       const repo = makeEntityMapRepo();
       const silo = makeSiloClient({
