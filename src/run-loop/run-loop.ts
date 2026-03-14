@@ -231,7 +231,7 @@ export class RunLoop {
           artifacts: { error: "slot unavailable" },
         });
       } catch (err) {
-        logger.warn("[run-loop] failed to report crash signal", { error: safeErrorMessage(err) });
+        logger.error("[run-loop] failed to report crash signal", { error: safeErrorMessage(err) });
       }
       await sleep(this.pollIntervalMs, this.signal);
       return;

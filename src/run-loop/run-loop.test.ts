@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Dispatcher, WorkerResult } from "../dispatcher/types.js";
 import { logger } from "../logger.js";
 import { Pool } from "../pool/pool.js";
@@ -248,8 +248,14 @@ describe("RunLoop — multi-discipline routing", () => {
 });
 
 describe("RunLoop — crash report logging", () => {
-  it("logs warning when crash report fails after slot allocation failure", async () => {
-    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  afterEach(() => {
+    errorSpy?.mockRestore();
+  });
+
+  it("logs error when crash report fails after slot allocation failure", async () => {
+    errorSpy = vi.spyOn(logger, "error").mockImplementation(() => logger);
 
     const firstClaim = {
       entity_id: "e-crash",
@@ -275,11 +281,9 @@ describe("RunLoop — crash report logging", () => {
     await vi.waitFor(() => expect(silo.report).toHaveBeenCalledTimes(1), { timeout: 3000 });
     await loop.stop();
 
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       "[run-loop] failed to report crash signal",
       expect.objectContaining({ error: "DB connection lost" }),
     );
-
-    warnSpy.mockRestore();
   });
 });
