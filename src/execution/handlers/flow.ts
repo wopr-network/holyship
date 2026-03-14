@@ -211,7 +211,7 @@ export async function handleFlowClaim(deps: McpServerDeps, args: Record<string, 
       } catch (err) {
         logger.error("[flow.claim] Failed to set affinity", {
           entityId: claimed.entityId,
-          workerId: worker_id,
+          worker_id: worker_id,
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -229,6 +229,7 @@ export async function handleFlowClaim(deps: McpServerDeps, args: Record<string, 
         .catch((err: unknown) => {
           logger.error("[flow.claim] Failed to emit entity.claimed event", {
             entityId: entity.id,
+            claimerId,
             error: err instanceof Error ? err.message : String(err),
           });
         });
@@ -334,7 +335,8 @@ export async function handleFlowReport(deps: McpServerDeps, args: Record<string,
     } catch (err) {
       logger.error("[flow.report] Failed to set affinity", {
         entityId,
-        workerId: worker_id,
+        invocationId: activeInvocation.id,
+        worker_id: worker_id,
         error: err instanceof Error ? err.message : String(err),
       });
     }
