@@ -124,13 +124,19 @@ describe("getWorktreeBase", () => {
 
 describe("validateWorktreePath", () => {
   const testBase = "/tmp/test-worktrees";
+  let originalWorktreeDir: string | undefined;
 
   beforeEach(() => {
-    vi.unstubAllEnvs();
+    originalWorktreeDir = process.env.WORKTREE_DIR;
+    delete process.env.WORKTREE_DIR;
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    if (originalWorktreeDir === undefined) {
+      delete process.env.WORKTREE_DIR;
+    } else {
+      process.env.WORKTREE_DIR = originalWorktreeDir;
+    }
   });
 
   it("returns resolved path when target is within base", () => {
