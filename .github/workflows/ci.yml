@@ -2,19 +2,23 @@ name: CI
 
 on:
   merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:
-  ci:
+  lint-check:
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: read
-      pull-requests: write
-    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +34,41 @@ jobs:
       - name: Lint and Type Check
         run: pnpm check
 
+  build:
+    runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
       - name: Build
         run: pnpm build
+
+  unit-test:
+    runs-on: [self-hosted, Linux, X64, test-runner]
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
 
       - name: Test
         run: pnpm test -- --coverage
@@ -41,3 +78,17 @@ jobs:
         uses: davelosert/vitest-coverage-report-action@v2
         with:
           json-summary-path: coverage/coverage-summary.json
+
+  ci:
+    if: always()
+    needs: [lint-check, build, unit-test]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.lint-check.result }}" != "success" ] || \
+             [ "${{ needs.build.result }}" != "success" ] || \
+             [ "${{ needs.unit-test.result }}" != "success" ]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
