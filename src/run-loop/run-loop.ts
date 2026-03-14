@@ -197,7 +197,7 @@ export class RunLoop {
     logger.info(`[radar] slot ${slotId} claimed entity`, {
       entity: claim.entity_id,
       flow: claim.flow ?? "none",
-      stage: (claim as Record<string, unknown>).stage ?? "?",
+      stage: claim.stage ?? "?",
     });
 
     const claimFlow = claim.flow;
@@ -238,14 +238,13 @@ export class RunLoop {
     }
 
     try {
-      const claimAny = claim as Record<string, unknown>;
-      const rawModelTier = (claimAny.model_tier as string | undefined) ?? "sonnet";
+      const rawModelTier = claim.model_tier ?? "sonnet";
       let modelTier: "opus" | "sonnet" | "haiku" =
         rawModelTier === "opus" || rawModelTier === "haiku" ? rawModelTier : "sonnet";
       // agentRole can be overridden by `continue` responses (e.g. when the engine
       // routes to a different state with a different role). If not overridden, the
       // original role from the claim is kept.
-      let agentRole = (claimAny.agent_role as string | null | undefined) ?? null;
+      let agentRole = claim.agent_role ?? null;
       const originalPrompt = claim.prompt;
       let currentPrompt = claim.prompt;
       let currentSignal: string | undefined;
@@ -270,7 +269,7 @@ export class RunLoop {
               workerId,
               entityId: claim.entity_id,
               agentRole,
-              templateContext: ((claim as Record<string, unknown>).context as Record<string, unknown> | null) ?? null,
+              templateContext: claim.context,
             });
             logger.info(`[radar] slot ${slotId} dispatch done`, {
               signal: result.signal,
@@ -339,25 +338,23 @@ export class RunLoop {
           currentPrompt = activityHistory ? `${activityHistory}\n\n---\n${basePrompt}` : basePrompt;
           // Update templateContext from the engine so the next dispatch uses fresh context
           if ("context" in response && response.context != null) {
-            (claim as Record<string, unknown>).context = response.context;
+            claim.context = response.context;
           }
           // Update model tier and agent role from the new state, resetting to
           // defaults when the continue response omits them.
-          const resp = response as Record<string, unknown>;
           const newTier =
-            typeof resp.model_tier === "string" &&
-            (resp.model_tier === "opus" || resp.model_tier === "sonnet" || resp.model_tier === "haiku")
-              ? resp.model_tier
+            response.model_tier === "opus" || response.model_tier === "sonnet" || response.model_tier === "haiku"
+              ? response.model_tier
               : "sonnet";
           if (newTier !== modelTier) {
             logger.info(`[radar] slot ${slotId} model tier changed`, {
               from: modelTier,
               to: newTier,
-              newState: resp.new_state,
+              newState: response.new_state,
             });
             modelTier = newTier;
           }
-          agentRole = typeof resp.agent_role === "string" ? resp.agent_role : null;
+          agentRole = response.agent_role ?? null;
           currentSignal = undefined;
           currentArtifacts = undefined;
           continue;

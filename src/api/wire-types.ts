@@ -16,6 +16,8 @@ export type ClaimResponse =
       stage: string;
       prompt: string;
       context: Record<string, unknown> | null;
+      model_tier?: string;
+      agent_role?: string;
       worker_notice?: string;
     };
 
