@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BRANCH_NAME_REGEX,
   getWorktreeBase,
@@ -124,6 +124,14 @@ describe("getWorktreeBase", () => {
 
 describe("validateWorktreePath", () => {
   const testBase = "/tmp/test-worktrees";
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it("returns resolved path when target is within base", () => {
     const target = `${testBase}/my-repo`;
