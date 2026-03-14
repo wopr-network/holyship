@@ -1,8 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { encryptCredentials, decryptCredentials } from "../../src/integrations/encrypt.js";
 import type { IntegrationCredentials } from "../../src/integrations/types.js";
 
 describe("encrypt / decrypt credentials", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   const creds: IntegrationCredentials = {
     provider: "linear",
     accessToken: "lin_api_abc123xyz",
@@ -58,30 +62,22 @@ describe("encrypt / decrypt credentials", () => {
   it("throws when decrypting with tampered ciphertext", () => {
     const encrypted = encryptCredentials(creds);
     const parts = encrypted.split(":");
-    // Flip a byte in the ciphertext
-    const tampered = parts[2]!.slice(0, -2) + "ff";
+    // XOR-flip the last byte so the change is guaranteed regardless of its current value
+    const cipherHex = parts[2]!;
+    const lastByte = parseInt(cipherHex.slice(-2), 16) ^ 0x01;
+    const tampered = cipherHex.slice(0, -2) + lastByte.toString(16).padStart(2, "0");
     const bad = `${parts[0]}:${parts[1]}:${tampered}`;
     expect(() => decryptCredentials(bad)).toThrow();
   });
 
   it("throws when SILO_ENCRYPTION_KEY is missing", () => {
-    const original = process.env.SILO_ENCRYPTION_KEY;
-    try {
-      delete process.env.SILO_ENCRYPTION_KEY;
-      expect(() => encryptCredentials(creds)).toThrow("SILO_ENCRYPTION_KEY is required");
-    } finally {
-      process.env.SILO_ENCRYPTION_KEY = original;
-    }
+    vi.stubEnv("SILO_ENCRYPTION_KEY", "");
+    expect(() => encryptCredentials(creds)).toThrow("SILO_ENCRYPTION_KEY is required");
   });
 
   it("throws when SILO_ENCRYPTION_KEY is wrong length", () => {
-    const original = process.env.SILO_ENCRYPTION_KEY;
-    try {
-      process.env.SILO_ENCRYPTION_KEY = "abcd"; // too short
-      expect(() => encryptCredentials(creds)).toThrow("must be a 64-character hex string");
-    } finally {
-      process.env.SILO_ENCRYPTION_KEY = original;
-    }
+    vi.stubEnv("SILO_ENCRYPTION_KEY", "abcd"); // too short
+    expect(() => encryptCredentials(creds)).toThrow("must be a 64-character hex string");
   });
 
   it("handles credentials with special characters", () => {

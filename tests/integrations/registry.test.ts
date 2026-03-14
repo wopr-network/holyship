@@ -58,9 +58,8 @@ describe("AdapterRegistry", () => {
 
   it("throws for unknown provider in credentials", async () => {
     const badCreds = { provider: "unknown_provider", accessToken: "tok" } as unknown as IntegrationCredentials;
+    // makeRow() already calls encryptCredentials internally
     const row = makeRow(badCreds);
-    // Force the encrypted blob to contain the bad provider
-    row.encryptedCredentials = encryptCredentials(badCreds);
     const repo = makeMockRepo(row);
     const registry = new AdapterRegistry(repo);
     await expect(
@@ -98,4 +97,7 @@ describe("AdapterRegistry", () => {
     }
     expect(repo.getById).toHaveBeenCalledWith("specific-id-123");
   });
+
+  // TODO(WOP-2166): Add dispatch tests for vcs.* ops (vcs.ci_status, vcs.pr_status, vcs.provision_worktree,
+  // vcs.merge_pr) to cover the VCS adapter routing path through AdapterRegistry.execute().
 });
