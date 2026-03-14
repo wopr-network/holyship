@@ -24,4 +24,18 @@ describe("isUniqueViolation", () => {
     expect(isUniqueViolation(undefined)).toBe(false);
     expect(isUniqueViolation(42)).toBe(false);
   });
+
+  it("traverses nested .cause chain to find code 23505", () => {
+    const inner = new Error("duplicate key value violates unique constraint");
+    (inner as NodeJS.ErrnoException).code = "23505";
+    const outer = new Error("query failed");
+    (outer as unknown as { cause: Error }).cause = inner;
+    expect(isUniqueViolation(outer)).toBe(true);
+  });
+
+  it("returns false when cause is not an Error instance", () => {
+    const err = new Error("query failed");
+    (err as unknown as { cause: unknown }).cause = "string cause";
+    expect(isUniqueViolation(err)).toBe(false);
+  });
 });

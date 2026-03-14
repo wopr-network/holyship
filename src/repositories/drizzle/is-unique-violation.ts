@@ -6,6 +6,6 @@
 export function isUniqueViolation(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if ("code" in err && (err as NodeJS.ErrnoException).code === "23505") return true;
-  if (err.cause != null) return isUniqueViolation(err.cause);
+  if (err.cause instanceof Error) return isUniqueViolation(err.cause);
   return false;
 }

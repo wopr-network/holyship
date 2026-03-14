@@ -1,10 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createTestDb, type TestDb } from "../../helpers/pg-test-db.js";
 import { DrizzleDomainEventRepository } from "../../../src/repositories/drizzle/domain-event.repo.js";
 import { DrizzleFlowRepository } from "../../../src/repositories/drizzle/flow.repo.js";
 import { DrizzleGateRepository } from "../../../src/repositories/drizzle/gate.repo.js";
 import { ConflictError } from "../../../src/errors.js";
 import { flowDefinitions, entities } from "../../../src/repositories/drizzle/schema.js";
+
+function makeUniqueViolationError(): Error {
+  const err = new Error("duplicate key value violates unique constraint");
+  (err as NodeJS.ErrnoException).code = "23505";
+  return err;
+}
 
 const TENANT = "t_test";
 
@@ -48,6 +54,13 @@ describe("domain-event append() unique constraint handling", () => {
     expect(ev1.sequence).toBe(1);
     expect(ev2.sequence).toBe(2);
   });
+
+  it("appendCas() returns null when a unique constraint violation occurs (concurrent write race)", async () => {
+    const spy = vi.spyOn(db, "transaction").mockRejectedValueOnce(makeUniqueViolationError());
+    const result = await repo.appendCas("test.event", "e1", { foo: 1 }, 0);
+    expect(result).toBeNull();
+    spy.mockRestore();
+  });
 });
 
 describe("flow.repo unique constraint handling", () => {
@@ -73,6 +86,13 @@ describe("flow.repo unique constraint handling", () => {
     const flow = await repo.create({ name: "state-test", initialState: "open" });
     await repo.addState(flow.id, { name: "open" });
     await expect(repo.addState(flow.id, { name: "open" })).rejects.toThrow(ConflictError);
+  });
+
+  it("snapshot() throws ConflictError when a unique constraint violation occurs (concurrent snapshot race)", async () => {
+    const flow = await repo.create({ name: "snap-flow", initialState: "open" });
+    const spy = vi.spyOn(db, "transaction").mockRejectedValueOnce(makeUniqueViolationError());
+    await expect(repo.snapshot(flow.id)).rejects.toThrow(ConflictError);
+    spy.mockRestore();
   });
 });
 
