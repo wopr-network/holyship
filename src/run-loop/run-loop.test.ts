@@ -247,6 +247,65 @@ describe("RunLoop — multi-discipline routing", () => {
   });
 });
 
+describe("RunLoop — model_tier and agent_role from claim", () => {
+  it("passes model_tier from claim to dispatcher", async () => {
+    const firstClaim = {
+      entity_id: "e-tier",
+      invocation_id: "inv-1",
+      prompt: "Do the work",
+      flow: "engineering",
+      stage: "coding",
+      context: null,
+      model_tier: "opus",
+      agent_role: "coder",
+    };
+
+    const dispatcher = makeDispatcher({ signal: "pr_created", artifacts: {}, exitCode: 0 });
+    const silo = {
+      claim: vi.fn().mockResolvedValueOnce(firstClaim).mockResolvedValue({ retry_after_ms: 50 }),
+      report: vi.fn().mockResolvedValue({ next_action: "done" }),
+    } as unknown as import("../engine/flow-engine-interface.js").IFlowEngine;
+
+    const config = makeConfig({ pool: new Pool(1), engine: silo, dispatcher });
+    const loop = new RunLoop(config);
+    loop.start();
+
+    await vi.waitFor(() => expect(dispatcher.dispatch).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    await loop.stop();
+
+    const opts = vi.mocked(dispatcher.dispatch).mock.calls[0]?.[1];
+    expect(opts?.modelTier).toBe("opus");
+    expect(opts?.agentRole).toBe("coder");
+  });
+
+  it("defaults model_tier to sonnet when not present in claim", async () => {
+    const firstClaim = {
+      entity_id: "e-default",
+      invocation_id: "inv-2",
+      prompt: "Do the work",
+      flow: "engineering",
+      stage: "coding",
+      context: null,
+    };
+
+    const dispatcher = makeDispatcher({ signal: "done", artifacts: {}, exitCode: 0 });
+    const silo = {
+      claim: vi.fn().mockResolvedValueOnce(firstClaim).mockResolvedValue({ retry_after_ms: 50 }),
+      report: vi.fn().mockResolvedValue({ next_action: "done" }),
+    } as unknown as import("../engine/flow-engine-interface.js").IFlowEngine;
+
+    const config = makeConfig({ pool: new Pool(1), engine: silo, dispatcher });
+    const loop = new RunLoop(config);
+    loop.start();
+
+    await vi.waitFor(() => expect(dispatcher.dispatch).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    await loop.stop();
+
+    const opts = vi.mocked(dispatcher.dispatch).mock.calls[0]?.[1];
+    expect(opts?.modelTier).toBe("sonnet");
+  });
+});
+
 describe("RunLoop — crash report logging", () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
