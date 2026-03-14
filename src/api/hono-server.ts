@@ -366,8 +366,14 @@ export function createHonoApp(deps: HonoServerDeps): Hono {
 
       const now = Date.now();
       // Use remote address as primary key; x-forwarded-for is not trusted without proxy config
-      const connInfo = getConnInfo(c);
-      const ip = connInfo.remote.address ?? "unknown";
+      let ip: string;
+      try {
+        const connInfo = getConnInfo(c);
+        ip = connInfo.remote.address ?? "unknown";
+      } catch {
+        // getConnInfo throws when there is no real HTTP connection (e.g. app.request() in tests)
+        ip = "unknown";
+      }
       const key = `${limiterName}:${ip}`;
 
       // Single-transaction token-bucket upsert: read current state, refill, decrement, write back.
