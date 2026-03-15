@@ -1,5 +1,5 @@
 /**
- * Wire types for silo's REST API.
+ * Wire types for holyship's REST API.
  */
 
 export type ClaimResponse =

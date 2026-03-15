@@ -39,7 +39,7 @@ import { createMcpServer, startStdioServer } from "./mcp-server.js";
 const DB_URL_DEFAULT = DATABASE_URL;
 
 /**
- * Validates that SILO_ADMIN_TOKEN is set when network transports are active.
+ * Validates that HOLYSHIP_ADMIN_TOKEN is set when network transports are active.
  * Throws if a network transport (HTTP or SSE) is started without a token.
  * Stdio-only mode is exempt (local, single-user).
  */
@@ -53,15 +53,15 @@ export function validateAdminToken(opts: {
   const networkActive = opts.startHttp || transport === "sse";
   if (networkActive && !token) {
     throw new Error(
-      "SILO_ADMIN_TOKEN must be set when using HTTP or SSE transport. " +
+      "HOLYSHIP_ADMIN_TOKEN must be set when using HTTP or SSE transport. " +
         "Admin tools are accessible over the network and require authentication. " +
-        "Set SILO_ADMIN_TOKEN in your environment or use stdio transport for local-only access.",
+        "Set HOLYSHIP_ADMIN_TOKEN in your environment or use stdio transport for local-only access.",
     );
   }
 }
 
 /**
- * Validates that SILO_WORKER_TOKEN is set when network transports are active.
+ * Validates that HOLYSHIP_WORKER_TOKEN is set when network transports are active.
  * Throws if a network transport (HTTP or SSE) is started without a token.
  * Stdio-only mode is exempt (local, single-user).
  */
@@ -75,9 +75,9 @@ export function validateWorkerToken(opts: {
   const networkActive = opts.startHttp || transport === "sse";
   if (networkActive && !token) {
     throw new Error(
-      "SILO_WORKER_TOKEN must be set when using HTTP or SSE transport. " +
+      "HOLYSHIP_WORKER_TOKEN must be set when using HTTP or SSE transport. " +
         "Worker tools (flow.*) are accessible over the network and require authentication. " +
-        "Set SILO_WORKER_TOKEN in your environment or use stdio transport for local-only access.",
+        "Set HOLYSHIP_WORKER_TOKEN in your environment or use stdio transport for local-only access.",
     );
   }
 }
@@ -86,7 +86,7 @@ const REAPER_INTERVAL_DEFAULT = "30000"; // 30s
 const CLAIM_TTL_DEFAULT = "300000"; // 5min
 
 function getTenantId(): string {
-  return process.env.SILO_TENANT_ID ?? "default";
+  return process.env.HOLYSHIP_TENANT_ID ?? "default";
 }
 
 async function openDb(url: string): Promise<{ db: Db; client: postgres.Sql }> {
@@ -95,7 +95,7 @@ async function openDb(url: string): Promise<{ db: Db; client: postgres.Sql }> {
 }
 
 const program = new Command();
-program.name("silo").version("0.1.0");
+program.name("holyship").version("0.1.0");
 
 // ─── init ───
 program
@@ -106,7 +106,7 @@ program
   .action(async (opts) => {
     const seedPath = opts.seed;
     if (typeof seedPath !== "string") {
-      console.log("Usage: silo init --seed <path> [--force]");
+      console.log("Usage: holyship init --seed <path> [--force]");
       return;
     }
 
@@ -126,7 +126,7 @@ program
       await db.delete(flowDefinitions).where(eq(flowDefinitions.tenantId, tenantId));
     }
 
-    const seedRoot = process.env.SILO_SEED_ROOT;
+    const seedRoot = process.env.HOLYSHIP_SEED_ROOT;
     const result = await loadSeed(resolve(seedPath), repos.flows, repos.gates, {
       allowedRoot: seedRoot ?? process.cwd(),
       db,
@@ -188,8 +188,8 @@ program
 
     const domainEventRepo = repos.domainEvents;
 
-    const useEventSourced = process.env.SILO_EVENT_SOURCED === "true";
-    const snapshotInterval = parseInt(process.env.SILO_SNAPSHOT_INTERVAL ?? "10", 10);
+    const useEventSourced = process.env.HOLYSHIP_EVENT_SOURCED === "true";
+    const snapshotInterval = parseInt(process.env.HOLYSHIP_SNAPSHOT_INTERVAL ?? "10", 10);
 
     let entityRepo: IEntityRepository;
     let invocationRepo: IInvocationRepository;
@@ -198,7 +198,7 @@ program
       const snapshotRepo = new DrizzleEntitySnapshotRepository(db, tenantId);
       entityRepo = new EventSourcedEntityRepository(mutableEntityRepo, domainEventRepo, snapshotRepo, snapshotInterval);
       invocationRepo = new EventSourcedInvocationRepository(mutableInvocationRepo, domainEventRepo);
-      process.stderr.write("[silo] Event-sourced repositories enabled\n");
+      process.stderr.write("[holyship] Event-sourced repositories enabled\n");
     } else {
       entityRepo = mutableEntityRepo;
       invocationRepo = mutableInvocationRepo;
@@ -282,8 +282,8 @@ program
       process.exit(1);
     }
 
-    const adminToken = process.env.SILO_ADMIN_TOKEN || undefined;
-    const workerToken = process.env.SILO_WORKER_TOKEN || undefined;
+    const adminToken = process.env.HOLYSHIP_ADMIN_TOKEN || undefined;
+    const workerToken = process.env.HOLYSHIP_WORKER_TOKEN || undefined;
 
     const startHttp = !opts.mcpOnly;
     const startMcp = !opts.httpOnly;
@@ -316,7 +316,7 @@ program
       const httpHost = opts.httpHost as string;
       let restCorsResult: ReturnType<typeof resolveCorsOrigin>;
       try {
-        restCorsResult = resolveCorsOrigin({ host: httpHost, corsEnv: process.env.SILO_CORS_ORIGIN });
+        restCorsResult = resolveCorsOrigin({ host: httpHost, corsEnv: process.env.HOLYSHIP_CORS_ORIGIN });
       } catch (err: unknown) {
         console.error((err as Error).message);
         await stopReaper();
@@ -380,7 +380,7 @@ program
       const host = opts.host as string;
       let corsResult: ReturnType<typeof resolveCorsOrigin>;
       try {
-        corsResult = resolveCorsOrigin({ host, corsEnv: process.env.SILO_CORS_ORIGIN });
+        corsResult = resolveCorsOrigin({ host, corsEnv: process.env.HOLYSHIP_CORS_ORIGIN });
       } catch (err: unknown) {
         console.error((err as Error).message);
         await stopReaper();
@@ -391,7 +391,7 @@ program
       const loopbackPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
       const httpServer = http.createServer(async (req, res) => {
-        // CORS: restrict to localhost origins when bound to loopback; require SILO_CORS_ORIGIN when bound to non-loopback
+        // CORS: restrict to localhost origins when bound to loopback; require HOLYSHIP_CORS_ORIGIN when bound to non-loopback
         const origin = req.headers.origin;
         if (origin) {
           const originAllowed = allowedOriginSet ? allowedOriginSet.has(origin) : loopbackPattern.test(origin);

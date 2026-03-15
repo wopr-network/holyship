@@ -24,7 +24,7 @@ export const noopLogger: Logger = {
   debug: () => {},
 };
 
-const logFile = process.env.SILO_LOG_FILE ?? "/data/silo.log";
+const logFile = process.env.HOLYSHIP_LOG_FILE ?? "/data/holyship.log";
 
 const consoleTransport = new winston.transports.Console({
   stderrLevels: ["error", "warn", "info", "http", "verbose", "debug", "silly"],

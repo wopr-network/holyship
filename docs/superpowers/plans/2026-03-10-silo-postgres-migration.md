@@ -1,14 +1,14 @@
-# Silo Engine Postgres Migration + Multi-Tenancy — Implementation Plan
+# Holyship Engine Postgres Migration + Multi-Tenancy — Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the silo engine from SQLite (`better-sqlite3`) to Postgres (`pg` + Drizzle), add `tenant_id` to all tables, and implement the scoped-repository-factory pattern for tenant isolation.
+**Goal:** Migrate the holyship engine from SQLite (`better-sqlite3`) to Postgres (`pg` + Drizzle), add `tenant_id` to all tables, and implement the scoped-repository-factory pattern for tenant isolation.
 
 **Architecture:** Rewrite schema from `sqliteTable` to `pgTable`, convert all 8 repository implementations from synchronous to async, replace SQLite-specific patterns (`.run()`, `.all()`, `.get()`, `result.changes`, `rowid`, sync transactions) with Postgres equivalents. Add `tenant_id` column to every table, create scoped repo factory that pre-binds repos to a tenant. Engine receives pre-scoped repos — no engine code changes needed.
 
 **Tech Stack:** TypeScript 5.9, Drizzle ORM (Postgres), pg, PGlite (tests), Vitest
 
-**Spec:** `docs/specs/2026-03-10-silo-saas-platform-design.md` — see "Technical Decisions" sections 1-4
+**Spec:** `docs/specs/2026-03-10-holyship-saas-platform-design.md` — see "Technical Decisions" sections 1-4
 
 **Depends on:** Plan 1 (platform-core extraction) does NOT need to be complete first. This plan is independent.
 
@@ -44,16 +44,16 @@ Every repo implementer needs this reference:
 ### Task 1: Rewrite schema from SQLite to Postgres
 
 **Files:**
-- Rewrite: `~/silo/src/repositories/drizzle/schema.ts`
-- Rewrite: `~/silo/src/main.ts`
-- Rewrite: `~/silo/src/config/db-path.ts`
-- Update: `~/silo/drizzle.config.ts`
-- Update: `~/silo/package.json` (swap deps)
+- Rewrite: `~/holyship/src/repositories/drizzle/schema.ts`
+- Rewrite: `~/holyship/src/main.ts`
+- Rewrite: `~/holyship/src/config/db-path.ts`
+- Update: `~/holyship/drizzle.config.ts`
+- Update: `~/holyship/package.json` (swap deps)
 
 - [ ] **Step 1: Swap dependencies**
 
 ```bash
-cd ~/silo
+cd ~/holyship
 pnpm remove better-sqlite3 @types/better-sqlite3
 pnpm add pg postgres
 pnpm add -D @types/pg @electric-sql/pglite
@@ -128,7 +128,7 @@ Replace the SQLite file path resolution with Postgres connection URL:
 export function getDatabaseUrl(): string {
   return process.env.SILO_DB_URL
     ?? process.env.DATABASE_URL
-    ?? "postgresql://localhost:5432/silo";
+    ?? "postgresql://localhost:5432/holyship";
 }
 ```
 
@@ -176,14 +176,14 @@ export default defineConfig({
   schema: "./src/repositories/drizzle/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
-  dbCredentials: { url: process.env.SILO_DB_URL ?? "postgresql://localhost:5432/silo" },
+  dbCredentials: { url: process.env.SILO_DB_URL ?? "postgresql://localhost:5432/holyship" },
 });
 ```
 
 - [ ] **Step 10: Generate initial Postgres migration**
 
 ```bash
-cd ~/silo && npx drizzle-kit generate
+cd ~/holyship && npx drizzle-kit generate
 ```
 
 Verify the generated SQL creates all 16 tables with correct types.
@@ -199,8 +199,8 @@ git add -A && git commit -m "feat: rewrite schema from SQLite to Postgres with t
 ### Task 2: Set up PGlite for tests
 
 **Files:**
-- Create: `~/silo/tests/helpers/pg-test-db.ts`
-- Update: `~/silo/vitest.config.ts` (if needed)
+- Create: `~/holyship/tests/helpers/pg-test-db.ts`
+- Update: `~/holyship/vitest.config.ts` (if needed)
 
 - [ ] **Step 1: Create test database helper**
 
@@ -246,7 +246,7 @@ describe("PGlite bootstrap", () => {
 - [ ] **Step 3: Run test**
 
 ```bash
-cd ~/silo && npx vitest run tests/helpers/
+cd ~/holyship && npx vitest run tests/helpers/
 ```
 
 Expected: PASS.
@@ -266,8 +266,8 @@ git add -A && git commit -m "feat: PGlite test infrastructure"
 The most complex repo — 16 methods, synchronous transactions, `.run()`, `.changes` patterns.
 
 **Files:**
-- Rewrite: `~/silo/src/repositories/drizzle/entity.repo.ts`
-- Update: `~/silo/tests/repositories/drizzle/entity.repo.test.ts`
+- Rewrite: `~/holyship/src/repositories/drizzle/entity.repo.ts`
+- Update: `~/holyship/tests/repositories/drizzle/entity.repo.test.ts`
 
 - [ ] **Step 1: Update type imports**
 
@@ -314,7 +314,7 @@ For the scoped-factory pattern, add `private tenantId: string` to the constructo
 - [ ] **Step 7: Run entity repo tests**
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/drizzle/entity.repo.test.ts
+cd ~/holyship && npx vitest run tests/repositories/drizzle/entity.repo.test.ts
 ```
 
 Expected: PASS.
@@ -330,8 +330,8 @@ git add -A && git commit -m "feat: rewrite DrizzleEntityRepository for Postgres 
 ### Task 4: Rewrite DrizzleFlowRepository
 
 **Files:**
-- Rewrite: `~/silo/src/repositories/drizzle/flow.repo.ts`
-- Update: `~/silo/tests/repositories/drizzle/flow.repo.test.ts`
+- Rewrite: `~/holyship/src/repositories/drizzle/flow.repo.ts`
+- Update: `~/holyship/tests/repositories/drizzle/flow.repo.test.ts`
 
 - [ ] **Step 1: Same conversion pattern as Task 3**
 
@@ -362,7 +362,7 @@ Same pattern: PGlite, async, tenantId in test data.
 - [ ] **Step 5: Run tests**
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/drizzle/flow.repo.test.ts
+cd ~/holyship && npx vitest run tests/repositories/drizzle/flow.repo.test.ts
 ```
 
 - [ ] **Step 6: Commit**
@@ -376,8 +376,8 @@ git add -A && git commit -m "feat: rewrite DrizzleFlowRepository for Postgres + 
 ### Task 5: Rewrite DrizzleInvocationRepository
 
 **Files:**
-- Rewrite: `~/silo/src/repositories/drizzle/invocation.repo.ts`
-- Update: `~/silo/tests/repositories/drizzle/invocation.repo.test.ts`
+- Rewrite: `~/holyship/src/repositories/drizzle/invocation.repo.ts`
+- Update: `~/holyship/tests/repositories/drizzle/invocation.repo.test.ts`
 
 - [ ] **Step 1: Same conversion pattern**
 
@@ -392,7 +392,7 @@ git add -A && git commit -m "feat: rewrite DrizzleFlowRepository for Postgres + 
 - [ ] **Step 3: Update tests, run, commit**
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/drizzle/invocation.repo.test.ts
+cd ~/holyship && npx vitest run tests/repositories/drizzle/invocation.repo.test.ts
 git add -A && git commit -m "feat: rewrite DrizzleInvocationRepository for Postgres + tenancy"
 ```
 
@@ -401,8 +401,8 @@ git add -A && git commit -m "feat: rewrite DrizzleInvocationRepository for Postg
 ### Task 6: Rewrite DrizzleDomainEventRepository
 
 **Files:**
-- Rewrite: `~/silo/src/repositories/drizzle/domain-event.repo.ts`
-- Update: `~/silo/tests/repositories/domain-event-cas.test.ts`
+- Rewrite: `~/holyship/src/repositories/drizzle/domain-event.repo.ts`
+- Update: `~/holyship/tests/repositories/domain-event-cas.test.ts`
 
 **Critical:** This repo has CAS (compare-and-swap) logic and SQLite error code detection.
 
@@ -439,7 +439,7 @@ Keep only `err.code === "23505"`.
 The CAS test (`domain-event-cas.test.ts`) tests concurrent append — critical to verify this still works on Postgres.
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/domain-event-cas.test.ts
+cd ~/holyship && npx vitest run tests/repositories/domain-event-cas.test.ts
 git add -A && git commit -m "feat: rewrite DrizzleDomainEventRepository for Postgres"
 ```
 
@@ -481,7 +481,7 @@ Four simpler repos. Same pattern for each.
 - [ ] **Step 5: Run all repo tests**
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/
+cd ~/holyship && npx vitest run tests/repositories/
 ```
 
 Expected: ALL repo tests PASS.
@@ -499,8 +499,8 @@ git add -A && git commit -m "feat: rewrite remaining repos for Postgres + tenanc
 ### Task 8: Create scoped repository factory
 
 **Files:**
-- Create: `~/silo/src/repositories/scoped-repos.ts`
-- Create: `~/silo/tests/repositories/scoped-repos.test.ts`
+- Create: `~/holyship/src/repositories/scoped-repos.ts`
+- Create: `~/holyship/tests/repositories/scoped-repos.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -528,7 +528,7 @@ describe("ScopedRepos", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/scoped-repos.test.ts
+cd ~/holyship && npx vitest run tests/repositories/scoped-repos.test.ts
 ```
 
 Expected: FAIL — `createScopedRepos` not defined.
@@ -564,7 +564,7 @@ export function createScopedRepos(db: Db, tenantId: string): ScopedRepos {
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd ~/silo && npx vitest run tests/repositories/scoped-repos.test.ts
+cd ~/holyship && npx vitest run tests/repositories/scoped-repos.test.ts
 ```
 
 Expected: PASS.
@@ -582,9 +582,9 @@ git add -A && git commit -m "feat: scoped repository factory for tenant isolatio
 The engine already takes repos via `EngineDeps`. The change is: instead of constructing repos internally, the caller passes pre-scoped repos.
 
 **Files:**
-- Modify: `~/silo/src/engine/engine.ts` (constructor signature)
-- Update: `~/silo/tests/engine/engine.integration.test.ts`
-- Update: `~/silo/src/execution/cli.ts` (wiring)
+- Modify: `~/holyship/src/engine/engine.ts` (constructor signature)
+- Update: `~/holyship/tests/engine/engine.integration.test.ts`
+- Update: `~/holyship/src/execution/cli.ts` (wiring)
 
 - [ ] **Step 1: Verify engine already uses injected repos**
 
@@ -599,7 +599,7 @@ Replace `bootstrap(":memory:")` with `createTestDb()`. Create scoped repos with 
 - [ ] **Step 3: Run engine integration tests**
 
 ```bash
-cd ~/silo && npx vitest run tests/engine/engine.integration.test.ts
+cd ~/holyship && npx vitest run tests/engine/engine.integration.test.ts
 ```
 
 - [ ] **Step 4: Update CLI wiring in cli.ts**
@@ -613,7 +613,7 @@ const repos = createScopedRepos(db, process.env.SILO_TENANT_ID ?? "default");
 - [ ] **Step 5: Run full test suite**
 
 ```bash
-cd ~/silo && npx vitest run
+cd ~/holyship && npx vitest run
 ```
 
 Expected: ALL tests PASS.
@@ -631,9 +631,9 @@ git add -A && git commit -m "feat: wire engine to scoped repos, update CLI"
 ### Task 10: Update Hono API for tenant-scoped requests
 
 **Files:**
-- Modify: `~/silo/src/api/hono-server.ts`
-- Update: `~/silo/tests/api/server.test.ts`
-- Update: `~/silo/tests/api/worker-auth-rest.test.ts`
+- Modify: `~/holyship/src/api/hono-server.ts`
+- Update: `~/holyship/tests/api/server.test.ts`
+- Update: `~/holyship/tests/api/worker-auth-rest.test.ts`
 
 - [ ] **Step 1: Add tenant resolution to auth middleware**
 
@@ -667,7 +667,7 @@ Add `x-tenant-id` header to all test requests. Verify tenant isolation.
 - [ ] **Step 4: Run API tests**
 
 ```bash
-cd ~/silo && npx vitest run tests/api/
+cd ~/holyship && npx vitest run tests/api/
 ```
 
 - [ ] **Step 5: Commit**
@@ -702,7 +702,7 @@ For each file:
 - [ ] **Step 2: Run full test suite**
 
 ```bash
-cd ~/silo && npx vitest run
+cd ~/holyship && npx vitest run
 ```
 
 Expected: ALL tests PASS.
@@ -718,10 +718,10 @@ git add -A && git commit -m "feat: migrate all tests to PGlite"
 ### Task 12: Update MCP server and handlers
 
 **Files:**
-- Update: `~/silo/src/execution/mcp-server.ts`
-- Update: `~/silo/src/execution/handlers/flow.ts`
-- Update: `~/silo/src/execution/handlers/admin.ts`
-- Update: `~/silo/src/execution/handlers/query.ts`
+- Update: `~/holyship/src/execution/mcp-server.ts`
+- Update: `~/holyship/src/execution/handlers/flow.ts`
+- Update: `~/holyship/src/execution/handlers/admin.ts`
+- Update: `~/holyship/src/execution/handlers/query.ts`
 
 - [ ] **Step 1: Thread tenantId through MCP handlers**
 
@@ -738,7 +738,7 @@ All admin tool handlers (`entity.create`, `flow.create`, etc.) need tenant scopi
 - [ ] **Step 4: Run admin tools tests**
 
 ```bash
-cd ~/silo && npx vitest run tests/admin-tools.test.ts
+cd ~/holyship && npx vitest run tests/admin-tools.test.ts
 ```
 
 - [ ] **Step 5: Commit**
@@ -752,12 +752,12 @@ git add -A && git commit -m "feat: tenant-scoped MCP handlers"
 ### Task 13: Data migration script for existing deployments
 
 **Files:**
-- Create: `~/silo/scripts/migrate-to-postgres.ts`
+- Create: `~/holyship/scripts/migrate-to-postgres.ts`
 
 - [ ] **Step 1: Write migration script**
 
 The script:
-1. Reads from an existing SQLite silo.db
+1. Reads from an existing SQLite holyship.db
 2. Connects to the target Postgres database
 3. Creates a tenant record (WOPR tenant for cheyenne-mountain)
 4. Copies all data table-by-table, setting `tenant_id` on every row
@@ -768,7 +768,7 @@ The script:
 import Database from "better-sqlite3";
 import postgres from "postgres";
 
-const sqlite = new Database(process.argv[2] ?? "silo.db");
+const sqlite = new Database(process.argv[2] ?? "holyship.db");
 const pg = postgres(process.env.SILO_DB_URL!);
 
 const TENANT_ID = process.env.MIGRATE_TENANT_ID ?? "wopr";
@@ -781,7 +781,7 @@ for (const table of TABLE_LIST) {
 }
 ```
 
-- [ ] **Step 2: Test with a real silo.db from cheyenne-mountain**
+- [ ] **Step 2: Test with a real holyship.db from cheyenne-mountain**
 
 - [ ] **Step 3: Commit**
 
@@ -794,7 +794,7 @@ git add -A && git commit -m "feat: SQLite-to-Postgres data migration script"
 ### Task 14: Update radar-db barrel exports
 
 **Files:**
-- Update: `~/silo/src/radar-db/schema.ts`
+- Update: `~/holyship/src/radar-db/schema.ts`
 - Update any radar-db repository files that import from the schema
 
 - [ ] **Step 1: Verify radar-db schema.ts is just a re-export barrel**
@@ -803,12 +803,12 @@ It should just re-export from the main schema. Confirm no SQLite-specific types.
 
 - [ ] **Step 2: Update any radar-db repos**
 
-Check `~/silo/src/radar-db/` for Drizzle repository files. Apply same Postgres conversion pattern.
+Check `~/holyship/src/radar-db/` for Drizzle repository files. Apply same Postgres conversion pattern.
 
 - [ ] **Step 3: Run full test suite one final time**
 
 ```bash
-cd ~/silo && npx vitest run
+cd ~/holyship && npx vitest run
 ```
 
 Expected: ALL tests PASS.
@@ -816,7 +816,7 @@ Expected: ALL tests PASS.
 - [ ] **Step 4: Run biome check**
 
 ```bash
-cd ~/silo && npm run check
+cd ~/holyship && npm run check
 ```
 
 Expected: PASS.

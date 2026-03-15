@@ -12,7 +12,7 @@ export interface SlotRole {
 
 export interface RunLoopConfig {
   pool: Pool;
-  /** Flow engine — either DirectFlowEngine (in-process) or SiloClient (HTTP). */
+  /** Flow engine — either DirectFlowEngine (in-process) or HolyshipClient (HTTP). */
   engine: IFlowEngine;
   dispatcher: Dispatcher;
   activityRepo?: IEntityActivityRepo;

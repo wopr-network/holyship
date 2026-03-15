@@ -7,7 +7,7 @@ export interface AppendEventInput {
   watchId: string | null;
   rawEvent: Record<string, unknown>;
   actionTaken: string | null;
-  siloResponse: Record<string, unknown> | null;
+  holyshipResponse: Record<string, unknown> | null;
 }
 
 export interface EventLogRow {
@@ -16,7 +16,7 @@ export interface EventLogRow {
   watchId: string | null;
   rawEvent: Record<string, unknown>;
   actionTaken: string | null;
-  siloResponse: Record<string, unknown> | null;
+  holyshipResponse: Record<string, unknown> | null;
   createdAt: number;
 }
 
@@ -27,7 +27,7 @@ function toRow(raw: typeof eventLog.$inferSelect): EventLogRow {
     watchId: raw.watchId,
     rawEvent: JSON.parse(raw.rawEvent) as Record<string, unknown>,
     actionTaken: raw.actionTaken,
-    siloResponse: raw.siloResponse ? (JSON.parse(raw.siloResponse) as Record<string, unknown>) : null,
+    holyshipResponse: raw.holyshipResponse ? (JSON.parse(raw.holyshipResponse) as Record<string, unknown>) : null,
     createdAt: raw.createdAt,
   };
 }
@@ -48,7 +48,7 @@ export class EventLogRepo {
       watchId: input.watchId,
       rawEvent: JSON.stringify(input.rawEvent),
       actionTaken: input.actionTaken,
-      siloResponse: input.siloResponse ? JSON.stringify(input.siloResponse) : null,
+      holyshipResponse: input.holyshipResponse ? JSON.stringify(input.holyshipResponse) : null,
       createdAt: now,
     });
     const [row] = await this.db.select().from(eventLog).where(eq(eventLog.id, id));

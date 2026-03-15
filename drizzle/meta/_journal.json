@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1773154245230,
-      "tag": "0000_short_randall",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1773170769115,
-      "tag": "0001_flat_sharon_ventura",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1773171067044,
-      "tag": "0002_fair_boom_boom",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1773179316356,
-      "tag": "0003_aromatic_vertigo",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1773430103398,
-      "tag": "0004_abnormal_firebird",
+      "when": 1773543135155,
+      "tag": "0000_slow_forge",
       "breakpoints": true
     }
   ]

@@ -6,7 +6,7 @@ describe("UI_HTML", () => {
     expect(typeof UI_HTML).toBe("string");
     expect(UI_HTML.length).toBeGreaterThan(100);
     expect(UI_HTML).toContain("<!DOCTYPE html>");
-    expect(UI_HTML).toContain("Silo");
+    expect(UI_HTML).toContain("Holyship");
   });
 
   it("contains the four view sections", () => {

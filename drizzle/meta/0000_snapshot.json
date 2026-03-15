@@ -1,5 +1,5 @@
 {
-  "id": "a25c8d28-a3d6-4733-9c12-29bfdb354603",
+  "id": "39f3e48b-4597-47a0-8bb0-90907d46ee74",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -432,6 +432,12 @@
           "name": "entity_activity_entity_seq_uniq",
           "columns": [
             {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
               "expression": "entity_id",
               "isExpression": false,
               "asc": true,
@@ -653,6 +659,21 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "entity_map_source_id_idx": {
+          "name": "entity_map_source_id_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -890,8 +911,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "silo_response": {
-          "name": "silo_response",
+        "holyship_response": {
+          "name": "holyship_response",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1202,6 +1223,18 @@
           "notNull": false,
           "default": false
         },
+        "issue_tracker_integration_id": {
+          "name": "issue_tracker_integration_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vcs_integration_id": {
+          "name": "vcs_integration_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "bigint",
@@ -1251,9 +1284,66 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_flow_definitions_issue_tracker": {
+          "name": "idx_flow_definitions_issue_tracker",
+          "columns": [
+            {
+              "expression": "issue_tracker_integration_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_flow_definitions_vcs": {
+          "name": "idx_flow_definitions_vcs",
+          "columns": [
+            {
+              "expression": "vcs_integration_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "flow_definitions_issue_tracker_integration_id_integrations_id_fk": {
+          "name": "flow_definitions_issue_tracker_integration_id_integrations_id_fk",
+          "tableFrom": "flow_definitions",
+          "tableTo": "integrations",
+          "columnsFrom": [
+            "issue_tracker_integration_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "flow_definitions_vcs_integration_id_integrations_id_fk": {
+          "name": "flow_definitions_vcs_integration_id_integrations_id_fk",
+          "tableFrom": "flow_definitions",
+          "tableTo": "integrations",
+          "columnsFrom": [
+            "vcs_integration_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1405,6 +1495,18 @@
         },
         "api_config": {
           "name": "api_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primitive_op": {
+          "name": "primitive_op",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primitive_params": {
+          "name": "primitive_params",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -1598,6 +1700,127 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.integrations": {
+      "name": "integrations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "credentials": {
+          "name": "credentials",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_integration_tenant_name": {
+          "name": "uq_integration_tenant_name",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_integrations_tenant": {
+          "name": "idx_integrations_tenant",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_integrations_tenant_category": {
+          "name": "idx_integrations_tenant_category",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.invocations": {
       "name": "invocations",
       "schema": "",
@@ -1759,6 +1982,43 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rate_limit_buckets": {
+      "name": "rate_limit_buckets",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tokens": {
+          "name": "tokens",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_refill": {
+          "name": "last_refill",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

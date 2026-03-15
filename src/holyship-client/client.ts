@@ -1,25 +1,25 @@
 import type { ClaimResponse, CreateEntityResponse, ReportResponse } from "../api/wire-types.js";
 import type { FlowEngineRequestOptions, IFlowEngine } from "../engine/flow-engine-interface.js";
 
-export interface SiloClientConfig {
+export interface HolyshipClientConfig {
   url: string;
   workerToken?: string;
 }
 
-export type SiloRequestOptions = FlowEngineRequestOptions;
+export type HolyshipRequestOptions = FlowEngineRequestOptions;
 
-export class SiloClient implements IFlowEngine {
+export class HolyshipClient implements IFlowEngine {
   private url: string;
   private authHeader: Record<string, string>;
 
-  constructor(config: SiloClientConfig) {
+  constructor(config: HolyshipClientConfig) {
     this.url = config.url;
     this.authHeader = config.workerToken ? { Authorization: `Bearer ${config.workerToken}` } : {};
   }
 
   async claim(
     params: { workerId?: string; role: string; flow?: string },
-    opts?: SiloRequestOptions,
+    opts?: HolyshipRequestOptions,
   ): Promise<ClaimResponse> {
     // workerId is best-effort affinity — REST endpoints don't carry it
     const endpoint = params.flow
@@ -40,7 +40,7 @@ export class SiloClient implements IFlowEngine {
     const res = await fetch(`${this.url}/api/entities`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...this.authHeader },
-      // silo expects `flow` (not `flowName`)
+      // holyship expects `flow` (not `flowName`)
       body: JSON.stringify({ flow: params.flowName, ...(params.payload ? { payload: params.payload } : {}) }),
       signal,
     });
@@ -55,7 +55,7 @@ export class SiloClient implements IFlowEngine {
       artifacts?: Record<string, unknown>;
       workerId?: string;
     },
-    opts?: SiloRequestOptions,
+    opts?: HolyshipRequestOptions,
   ): Promise<ReportResponse> {
     // flow.report blocks — no timeout applied
     const body: Record<string, unknown> = { signal: params.signal };

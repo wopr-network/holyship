@@ -167,7 +167,7 @@ export class RunLoop {
   }
 
   private async claimAndProcess(slotId: string, workerId: string, discipline: string): Promise<void> {
-    const { engine: silo, dispatcher, pool, flow } = this.config;
+    const { engine: holyship, dispatcher, pool, flow } = this.config;
 
     // Concurrency gate: global per-flow limit
     // Use pendingClaims to prevent TOCTOU: multiple slots checking the count
@@ -183,7 +183,7 @@ export class RunLoop {
     this.pendingClaims++;
     let claim: ClaimResponse;
     try {
-      claim = await silo.claim({ workerId, role: discipline, flow }, { signal: this.signal });
+      claim = await holyship.claim({ workerId, role: discipline, flow }, { signal: this.signal });
     } finally {
       this.pendingClaims--;
     }
@@ -209,7 +209,7 @@ export class RunLoop {
       const repoActive = pool.activeCountByRepo(claimFlow, claimRepo);
       if (repoActive >= this.config.maxConcurrentPerRepo) {
         try {
-          await silo.report({
+          await holyship.report({
             entityId: claim.entity_id,
             signal: "crash",
             artifacts: { error: `per-repo concurrency limit reached for ${claimRepo}` },
@@ -225,7 +225,7 @@ export class RunLoop {
     const slot = pool.allocate(slotId, workerId, discipline, claim.entity_id, claim.prompt, claimFlow, claimRepo);
     if (!slot) {
       try {
-        await silo.report({
+        await holyship.report({
           entityId: claim.entity_id,
           signal: "crash",
           artifacts: { error: "slot unavailable" },
@@ -311,7 +311,7 @@ export class RunLoop {
         pool.setState(slotId, "reporting");
         let response: ReportResponse;
         try {
-          response = await silo.report({
+          response = await holyship.report({
             entityId: claim.entity_id,
             signal: currentSignal,
             artifacts: currentArtifacts,

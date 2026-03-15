@@ -1,5 +1,5 @@
 {
-  "name": "@wopr-network/silo",
+  "name": "@wopr-network/holyship",
   "version": "0.2.2",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -8,7 +8,7 @@
   },
   "main": "./dist/src/main.js",
   "bin": {
-    "silo": "./dist/src/execution/cli.js"
+    "holyship": "./dist/src/execution/cli.js"
   },
   "types": "./dist/src/main.d.ts",
   "exports": {
@@ -74,6 +74,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/wopr-network/silo.git"
+    "url": "https://github.com/wopr-network/holyship.git"
   }
 }

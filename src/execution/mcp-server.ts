@@ -79,9 +79,9 @@ export interface McpServerDeps {
 }
 
 export interface McpServerOpts {
-  /** SILO_ADMIN_TOKEN — if set, admin.* tools require this token */
+  /** HOLYSHIP_ADMIN_TOKEN — if set, admin.* tools require this token */
   adminToken?: string;
-  /** SILO_WORKER_TOKEN — if set, flow.* tools require this token */
+  /** HOLYSHIP_WORKER_TOKEN — if set, flow.* tools require this token */
   workerToken?: string;
   /** Token provided by the caller (from HTTP Authorization header, or undefined for stdio) */
   callerToken?: string;
@@ -90,7 +90,7 @@ export interface McpServerOpts {
 }
 
 function getSystemDefaultGateTimeoutMs(): number {
-  const parsed = parseInt(process.env.SILO_DEFAULT_GATE_TIMEOUT_MS ?? "", 10);
+  const parsed = parseInt(process.env.HOLYSHIP_DEFAULT_GATE_TIMEOUT_MS ?? "", 10);
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : 300000;
 }
 
@@ -100,7 +100,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "flow.claim",
     description:
-      "Claim the next available work item for a given discipline role. Silo selects the highest-priority entity across all matching flows. Returns entity_id, invocation_id, flow, stage, prompt — or a check_back response with retry_after_ms if no work is available.",
+      "Claim the next available work item for a given discipline role. Holyship selects the highest-priority entity across all matching flows. Returns entity_id, invocation_id, flow, stage, prompt — or a check_back response with retry_after_ms if no work is available.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -554,7 +554,7 @@ const TOOL_DEFINITIONS = [
 ];
 
 export function createMcpServer(deps: McpServerDeps, opts?: McpServerOpts): Server {
-  const server = new Server({ name: "silo", version: "0.1.0" }, { capabilities: { tools: {} } });
+  const server = new Server({ name: "holyship", version: "0.1.0" }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOL_DEFINITIONS,

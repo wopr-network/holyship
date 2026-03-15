@@ -70,13 +70,13 @@ describe("encrypt / decrypt credentials", () => {
     expect(() => decryptCredentials(bad)).toThrow();
   });
 
-  it("throws when SILO_ENCRYPTION_KEY is missing", () => {
-    vi.stubEnv("SILO_ENCRYPTION_KEY", "");
-    expect(() => encryptCredentials(creds)).toThrow("SILO_ENCRYPTION_KEY is required");
+  it("throws when HOLYSHIP_ENCRYPTION_KEY is missing", () => {
+    vi.stubEnv("HOLYSHIP_ENCRYPTION_KEY", "");
+    expect(() => encryptCredentials(creds)).toThrow("HOLYSHIP_ENCRYPTION_KEY is required");
   });
 
-  it("throws when SILO_ENCRYPTION_KEY is wrong length", () => {
-    vi.stubEnv("SILO_ENCRYPTION_KEY", "abcd"); // too short
+  it("throws when HOLYSHIP_ENCRYPTION_KEY is wrong length", () => {
+    vi.stubEnv("HOLYSHIP_ENCRYPTION_KEY", "abcd"); // too short
     expect(() => encryptCredentials(creds)).toThrow("must be a 64-character hex string");
   });
 

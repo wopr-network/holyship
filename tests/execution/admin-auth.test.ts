@@ -58,7 +58,7 @@ describe("admin auth guard", () => {
     expect(result.content[0].text).toContain("id");
   });
 
-  it("treats empty-string SILO_ADMIN_TOKEN as unset (open mode)", async () => {
+  it("treats empty-string HOLYSHIP_ADMIN_TOKEN as unset (open mode)", async () => {
     const opts: McpServerOpts = { adminToken: "" };
     const result = await callToolHandler(stubDeps, "admin.flow.create", {}, opts);
     expect(result.isError).toBe(true);
@@ -77,6 +77,6 @@ describe("admin auth guard", () => {
     const opts: McpServerOpts = { adminToken: "secret-token-123" };
     const result = await callToolHandler(stubDeps, "admin.flow.create", {}, opts);
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).not.toContain("SILO_ADMIN_TOKEN");
+    expect(result.content[0].text).not.toContain("HOLYSHIP_ADMIN_TOKEN");
   });
 });

@@ -1,4 +1,4 @@
-# Silo
+# Holyship
 
 You **will** deploy AI to write code. You must. Everyone will. The question is:
 
@@ -26,11 +26,11 @@ The question isn't how to skip the correction cycles. It's how to make them fast
 
 ---
 
-Silo is a flow engine and worker pool for agentic software engineering. It defines pipelines as state machines, enforces transitions with deterministic gates, and gives AI agents exactly two API calls: `claim` work, `report` results. The agent never decides what comes next. The engine does — based on evidence, not opinion.
+Holyship is a flow engine and worker pool for agentic software engineering. It defines pipelines as state machines, enforces transitions with deterministic gates, and gives AI agents exactly two API calls: `claim` work, `report` results. The agent never decides what comes next. The engine does — based on evidence, not opinion.
 
 ```
 Vibe coding:  Human → AI → Hope → Production
-Silo:         Human → AI → Gate → AI → Gate → AI → Gate → Production
+Holyship:         Human → AI → Gate → AI → Gate → AI → Gate → Production
 ```
 
 ## How It Works
@@ -75,7 +75,7 @@ These are shell commands the engine executes. `tsc` either exits 0 or it doesn't
 
 Workers declare a **discipline** — not a task role. `claim(role: "engineering")` means: I am an engineering mind. Give me the highest-priority engineering work across all flows. The pipeline picks the entity; the worker never does.
 
-Silo hands the agent a prompt — the work for the current state. The agent doesn't know the flow. Doesn't know how many states there are. Doesn't know what comes next. It gets instructions and a signal to report when it's done.
+Holyship hands the agent a prompt — the work for the current state. The agent doesn't know the flow. Doesn't know how many states there are. Doesn't know what comes next. It gets instructions and a signal to report when it's done.
 
 When no work is available:
 
@@ -89,35 +89,35 @@ When no work is available:
 
 ### `report` — "I did the thing. Am I clear to advance?"
 
-Silo runs the gate. The call blocks until the gate resolves — 200ms or 8 minutes while CI finishes. Three outcomes:
+Holyship runs the gate. The call blocks until the gate resolves — 200ms or 8 minutes while CI finishes. Three outcomes:
 
 - **`continue`** — gate passed. Response contains the next prompt. Keep going.
 - **`waiting`** — gate failed. Response says why. The agent should stop. Something external needs to change before the entity can advance.
 - **`check_back`** — gate timed out. Not an error. Call again after a short wait.
 
-One `claim` to start. Then `report`, `report`, `report` until silo says stop. The agent never decides what level comes next. It does work, reports signals, and silo — based on evidence — tells it what to do.
+One `claim` to start. Then `report`, `report`, `report` until holyship says stop. The agent never decides what level comes next. It does work, reports signals, and holyship — based on evidence — tells it what to do.
 
 ### See It In Action
 
-**Mode 1: Your agent drives.** Your agent connects to silo via MCP. It claims once, then reports its way through:
+**Mode 1: Your agent drives.** Your agent connects to holyship via MCP. It claims once, then reports its way through:
 
 ```
 Agent: flow.claim()
-Silo:  feat-392. State: "backlog". Write an implementation spec — read
+Holyship:  feat-392. State: "backlog". Write an implementation spec — read
        the codebase, identify the files, the function signatures, the
        edge cases. Post the spec on the issue. Report "spec_ready".
 
        ... agent writes the spec ...
 
 Agent: flow.report({ signal: "spec_ready" })
-Silo:  Gate passed. State: "coding". Implement the spec. Create a
+Holyship:  Gate passed. State: "coding". Implement the spec. Create a
        branch, write failing tests first, then implementation. Push
        a PR. Report "pr_created".
 
        ... agent writes the code, pushes ...
 
 Agent: flow.report({ signal: "pr_created", artifacts: { prUrl: "..." } })
-Silo:  Gate running... [8 minutes — CI is slow today]
+Holyship:  Gate running... [8 minutes — CI is slow today]
        tsc: PASS. biome: PASS. tests: PASS.
        State: "reviewing". Check CI. Read every review bot comment.
        Read the diff. Report "clean" or "issues".
@@ -125,54 +125,54 @@ Silo:  Gate running... [8 minutes — CI is slow today]
        ... agent reviews, security bot flagged unvalidated input ...
 
 Agent: flow.report({ signal: "issues", artifacts: { findings: "..." } })
-Silo:  State: "fixing". Here's what the reviewer found:
+Holyship:  State: "fixing". Here's what the reviewer found:
        [unvalidated user input on line 47 of auth.ts]
        Fix it. Push. Report "fixes_pushed".
 
        ... agent fixes, pushes ...
 
 Agent: flow.report({ signal: "fixes_pushed" })
-Silo:  State: "reviewing". Back to review. Not forward — back.
+Holyship:  State: "reviewing". Back to review. Not forward — back.
        Report "clean" or "issues".
 
        ... everything clean this time ...
 
 Agent: flow.report({ signal: "clean" })
-Silo:  Gate passed. State: "merging". Merge queue entered.
+Holyship:  Gate passed. State: "merging". Merge queue entered.
 
 Agent: flow.report({ signal: "merged" })
-Silo:  feat-392 is done.
+Holyship:  feat-392 is done.
 ```
 
 One `claim`. Seven `report`s. The agent never chose what state came next. Never decided "good enough." Never skipped a step. The security finding on line 47 didn't get swept under the rug. The pipeline would not advance until a reviewer looked at the fixed code and said `clean`.
 
-**Mode 2: Silo drives.** Give silo your API key. It runs the entire pipeline autonomously — spawning the right agent for each state, feeding it the prompt, parsing the signal, running the gate, advancing the entity:
+**Mode 2: Holyship drives.** Give holyship your API key. It runs the entire pipeline autonomously — spawning the right agent for each state, feeding it the prompt, parsing the signal, running the gate, advancing the entity:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-npx silo run --flow my-pipeline
+npx holyship run --flow my-pipeline
 ```
 
 ```
-[silo] feat-392 entered "spec" — spawning architect (opus)
-[silo] architect → spec_ready — running gate... PASS
-[silo] feat-392 entered "coding" — spawning coder (sonnet)
-[silo] coder → pr_created — running gate: tsc... PASS, biome... PASS, tests... PASS
-[silo] feat-392 entered "reviewing" — spawning reviewer (sonnet)
-[silo] reviewer → issues — "unvalidated input in auth.ts:47"
-[silo] feat-392 entered "fixing" — spawning fixer (sonnet)
-[silo] fixer → fixes_pushed — returning to reviewing
-[silo] feat-392 entered "reviewing" — spawning reviewer (sonnet)
-[silo] reviewer → clean — running gate... PASS
-[silo] feat-392 entered "merging" — merge queue entered
-[silo] feat-392 → done. Merged.
+[holyship] feat-392 entered "spec" — spawning architect (opus)
+[holyship] architect → spec_ready — running gate... PASS
+[holyship] feat-392 entered "coding" — spawning coder (sonnet)
+[holyship] coder → pr_created — running gate: tsc... PASS, biome... PASS, tests... PASS
+[holyship] feat-392 entered "reviewing" — spawning reviewer (sonnet)
+[holyship] reviewer → issues — "unvalidated input in auth.ts:47"
+[holyship] feat-392 entered "fixing" — spawning fixer (sonnet)
+[holyship] fixer → fixes_pushed — returning to reviewing
+[holyship] feat-392 entered "reviewing" — spawning reviewer (sonnet)
+[holyship] reviewer → clean — running gate... PASS
+[holyship] feat-392 entered "merging" — merge queue entered
+[holyship] feat-392 → done. Merged.
 ```
 
 Same flow. Same gates. Same escalation. The only difference is who turns the crank.
 
 ## The Deeper Truth
 
-Silo is not an orchestration engine that happens to give prompts to agents. **Silo is a prompt engineering state machine.** Every state is a prompt. Every transition is a context transformation. Every gate is a deterministic filter that decides what prompt the agent gets next — or whether it gets one at all.
+Holyship is not an orchestration engine that happens to give prompts to agents. **Holyship is a prompt engineering state machine.** Every state is a prompt. Every transition is a context transformation. Every gate is a deterministic filter that decides what prompt the agent gets next — or whether it gets one at all.
 
 The flow definition is the engineering artifact. Not the agent code. Not the model selection. The flow.
 
@@ -198,25 +198,25 @@ The design question is not "how do we reduce the review/fix loop." It is: **give
 
 ```bash
 # Initialize with a flow definition
-npx silo init --seed seeds/my-pipeline.json
+npx holyship init --seed seeds/my-pipeline.json
 
 # Serve (passive mode — agents pull work via MCP)
-npx silo serve
+npx holyship serve
 
 # Run autonomous pipeline (active mode)
-npx silo run --flow my-pipeline
+npx holyship run --flow my-pipeline
 
 # Check pipeline state
-npx silo status
+npx holyship status
 ```
 
 ### Environment
 
 ```bash
-SILO_DB_PATH=./silo.db          # SQLite database path
-SILO_ADMIN_TOKEN=...            # Required for HTTP/SSE transport
-SILO_WORKER_TOKEN=...           # Required for HTTP/SSE transport
-SILO_CORS_ORIGIN=...            # CORS origin for dashboard
+HOLYSHIP_DB_PATH=./holyship.db          # SQLite database path
+HOLYSHIP_ADMIN_TOKEN=...            # Required for HTTP/SSE transport
+HOLYSHIP_WORKER_TOKEN=...           # Required for HTTP/SSE transport
+HOLYSHIP_CORS_ORIGIN=...            # CORS origin for dashboard
 ANTHROPIC_API_KEY=sk-ant-...    # For active mode
 ```
 
@@ -224,7 +224,7 @@ ANTHROPIC_API_KEY=sk-ant-...    # For active mode
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                    Silo                          │
+│                    Holyship                          │
 │                                                  │
 │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
 │  │  Engine   │  │  Worker  │  │  Dispatcher   │  │

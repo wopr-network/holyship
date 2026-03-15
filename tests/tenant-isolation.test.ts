@@ -433,14 +433,14 @@ describe("tenant isolation — radar-db repos", () => {
       watchId: null,
       rawEvent: { type: "push" },
       actionTaken: "created",
-      siloResponse: null,
+      holyshipResponse: null,
     });
     await el2.append({
       sourceId: "src-2",
       watchId: null,
       rawEvent: { type: "pr" },
       actionTaken: "created",
-      siloResponse: null,
+      holyshipResponse: null,
     });
 
     // list() scoped to tenant
