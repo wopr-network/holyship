@@ -9,6 +9,8 @@ export const PlatformEnvSchema = z.object({
   GITHUB_APP_ID: z.string().min(1).optional(),
   GITHUB_APP_PRIVATE_KEY: z.string().min(1).optional(),
   GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
+  HOLYSHIP_ADMIN_TOKEN: z.string().min(1).optional(),
+  HOLYSHIP_WORKER_TOKEN: z.string().min(1).optional(),
   FLEET_DATA_DIR: z.string().default("/data/fleet"),
   RESEND_API_KEY: z.string().min(1).optional(),
   FROM_EMAIL: z.string().email().optional(),

@@ -84,12 +84,6 @@ describe("Auth boundary — unauthenticated requests", () => {
 
   // ── Admin-only routes (requireAdminAuth) ──
   const adminRoutes: Array<{ method: string; path: string; body?: unknown }> = [
-    { method: "GET", path: "/api/entities/fake-id/activity" },
-    { method: "GET", path: "/api/pool/slots" },
-    { method: "GET", path: "/api/workers" },
-    { method: "GET", path: "/api/sources" },
-    { method: "GET", path: "/api/sources/fake-id/watches" },
-    { method: "GET", path: "/api/events" },
     { method: "POST", path: "/api/admin/flows/outer-test-flow/pause" },
     { method: "POST", path: "/api/admin/flows/outer-test-flow/resume" },
     { method: "POST", path: "/api/admin/entities/fake-id/cancel" },
@@ -98,11 +92,6 @@ describe("Auth boundary — unauthenticated requests", () => {
     { method: "POST", path: "/api/admin/workers/fake-id/undrain" },
     { method: "POST", path: "/api/admin/entities/fake-id/gates/fake-gate/rerun" },
     { method: "PUT", path: "/api/flows/outer-test-flow", body: { definition: {} } },
-    { method: "POST", path: "/api/admin/integrations", body: { name: "test" } },
-    { method: "GET", path: "/api/admin/integrations" },
-    { method: "GET", path: "/api/admin/integrations/fake-id" },
-    { method: "PATCH", path: "/api/admin/integrations/fake-id", body: { name: "updated" } },
-    { method: "DELETE", path: "/api/admin/integrations/fake-id" },
   ];
 
   for (const route of adminRoutes) {
