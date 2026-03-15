@@ -82,7 +82,7 @@ describe("Postgres bootstrap", () => {
     expect(rows).toEqual([]);
   });
 
-  it("all 19 tables are created", async () => {
+  it("all 14 tables are created", async () => {
     const res = await createTestDb();
     close = res.close;
 
@@ -95,7 +95,8 @@ describe("Postgres bootstrap", () => {
     expect(tableNames).toContain("entities");
     expect(tableNames).toContain("events");
     expect(tableNames).toContain("domain_events");
-    expect(tableNames).toContain("entity_activity");
-    expect(tableNames.length).toBeGreaterThanOrEqual(19);
+    expect(tableNames).toContain("github_installations");
+    expect(tableNames).toContain("holyshipper_containers");
+    expect(tableNames.length).toBeGreaterThanOrEqual(14);
   });
 });

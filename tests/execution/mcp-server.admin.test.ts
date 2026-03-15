@@ -33,9 +33,9 @@ describe("MCP tool listing", () => {
     deps.flows.listAll = async () => [coderFlow];
   });
 
-  it("lists all 34 tools", async () => {
+  it("lists all 29 tools", async () => {
     const result = await listTools(deps);
-    expect(result.tools).toHaveLength(34);
+    expect(result.tools).toHaveLength(29);
     const names = result.tools.map((t: { name: string }) => t.name).sort();
     expect(names).toEqual([
       "admin.entity.cancel",
@@ -52,11 +52,6 @@ describe("MCP tool listing", () => {
       "admin.gate.attach",
       "admin.gate.create",
       "admin.gate.rerun",
-      "admin.integration.create",
-      "admin.integration.delete",
-      "admin.integration.get",
-      "admin.integration.list",
-      "admin.integration.update",
       "admin.state.create",
       "admin.state.update",
       "admin.transition.create",

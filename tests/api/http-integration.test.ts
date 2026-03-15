@@ -213,37 +213,4 @@ describe("HTTP integration — admin endpoints", () => {
     expect(res.status).toBe(404);
   });
 
-  it("GET /api/pool/slots returns shape even without pool", async () => {
-    const res = await t.app.request("/api/pool/slots", {
-      headers: adminHeaders(),
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
-    expect(body).toHaveProperty("slots");
-    expect(body).toHaveProperty("available");
-    expect(body).toHaveProperty("capacity");
-  });
-
-  it("GET /api/workers returns empty array without worker repo", async () => {
-    const res = await t.app.request("/api/workers", {
-      headers: adminHeaders(),
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toEqual([]);
-  });
-
-  it("GET /api/sources returns empty array without source repo", async () => {
-    const res = await t.app.request("/api/sources", {
-      headers: adminHeaders(),
-    });
-    expect(res.status).toBe(200);
-  });
-
-  it("GET /api/events returns empty array without event log repo", async () => {
-    const res = await t.app.request("/api/events", {
-      headers: adminHeaders(),
-    });
-    expect(res.status).toBe(200);
-  });
 });

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
-import { resolveSessionId, verifySessionToken, extractBearerToken, validateAdminToken, validateWorkerToken } from "../../src/execution/cli.js";
+import { resolveSessionId, verifySessionToken, validateAdminToken, validateWorkerToken } from "../../src/execution/cli.js";
 
 const CLI = join(import.meta.dirname, "../../src/execution/cli.ts");
 
@@ -235,33 +235,6 @@ describe("verifySessionToken", () => {
   });
 });
 
-describe("extractBearerToken", () => {
-  it("extracts token from valid Bearer header", () => {
-    expect(extractBearerToken("Bearer my-secret-token")).toBe("my-secret-token");
-  });
-
-  it("is case-insensitive for Bearer prefix", () => {
-    expect(extractBearerToken("bearer my-token")).toBe("my-token");
-    expect(extractBearerToken("BEARER my-token")).toBe("my-token");
-  });
-
-  it("trims whitespace from extracted token", () => {
-    expect(extractBearerToken("Bearer   spaced-token  ")).toBe("spaced-token");
-  });
-
-  it("returns undefined for missing header", () => {
-    expect(extractBearerToken(undefined)).toBeUndefined();
-  });
-
-  it("returns undefined for non-Bearer header", () => {
-    expect(extractBearerToken("Basic dXNlcjpwYXNz")).toBeUndefined();
-  });
-
-  it("returns undefined for Bearer with no token", () => {
-    expect(extractBearerToken("Bearer ")).toBeUndefined();
-    expect(extractBearerToken("Bearer")).toBeUndefined();
-  });
-});
 
 describe("validateAdminToken", () => {
   it("throws when HTTP is active and no admin token", () => {
