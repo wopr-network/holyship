@@ -4,7 +4,7 @@
 
 ## Problem
 
-A single Linear issue (e.g., WOP-2104) can require work across multiple repos (e.g., `wopr-platform` + `platform-core`). Silo currently assumes one entity = one repo = one worktree = one PR. Multi-repo issues cannot be processed.
+A single Linear issue (e.g., WOP-2104) can require work across multiple repos (e.g., `wopr-platform` + `platform-core`). Holyship currently assumes one entity = one repo = one worktree = one PR. Multi-repo issues cannot be processed.
 
 ## Design Principle
 
@@ -84,7 +84,7 @@ Keys in `worktrees` and `prs` are the repo name (not full `owner/name`). The ful
 
 Gate scripts are **unchanged**. They still accept `(PR_NUMBER, REPO)` and return 0/1.
 
-The change is in **silo's gate evaluator**. For any gate that operates on PRs:
+The change is in **holyship's gate evaluator**. For any gate that operates on PRs:
 
 1. Read `entity.artifacts.prs` (a map of repo → PR URL)
 2. For each entry, extract PR number and repo
@@ -109,7 +109,7 @@ Existing gate scripts take the same arguments. No changes needed in cheyenne-mou
 
 ## Changes by Repo
 
-### silo
+### holyship
 - **Ingestion**: Parse `**Repo:**` line into repos array
 - **Entity creation**: Store repos in `entity.payload.repos`
 - **Gate evaluator**: Loop over `artifacts.prs`, call gate per repo/PR, AND results

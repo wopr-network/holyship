@@ -5,7 +5,7 @@ import http from "node:http";
 import { serve } from "@hono/node-server";
 import { createTestApp, WORKER_TOKEN, type TestApp } from "../helpers/test-app.js";
 import { Ingestor } from "../../src/ingestion/ingestor.js";
-import { SiloClient } from "../../src/silo-client/client.js";
+import { HolyshipClient } from "../../src/holyship-client/client.js";
 import type { IEntityMapRepository } from "../../src/radar-db/repos/entity-map-repo.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -55,7 +55,7 @@ describe("Ingestor integration — new entity", () => {
   beforeAll(async () => {
     t = await createTestApp({ seedPath: SEED });
 
-    // Start real HTTP server for SiloClient (tests the full HTTP path)
+    // Start real HTTP server for HolyshipClient (tests the full HTTP path)
     server = serve({ fetch: t.app.fetch, port: 0, hostname: "127.0.0.1" }) as http.Server;
     await new Promise<void>((r) => {
       if (server.listening) r();
@@ -67,8 +67,8 @@ describe("Ingestor integration — new entity", () => {
     // does not set rowCount, so DrizzleEntityMapRepository.insertIfAbsent always
     // returns false. The in-memory repo gives correct semantics for unit testing.
     const entityMapRepo = new InMemoryEntityMapRepository();
-    const siloClient = new SiloClient({ url: `http://127.0.0.1:${port}`, workerToken: WORKER_TOKEN });
-    ingestor = new Ingestor(entityMapRepo, siloClient);
+    const holyshipClient = new HolyshipClient({ url: `http://127.0.0.1:${port}`, workerToken: WORKER_TOKEN });
+    ingestor = new Ingestor(entityMapRepo, holyshipClient);
   });
 
   afterAll(async () => {

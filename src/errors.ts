@@ -1,12 +1,12 @@
-export class SiloError extends Error {
+export class HolyshipError extends Error {
   constructor(msg: string) {
     super(msg);
     this.name = new.target.name;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
-export class NotFoundError extends SiloError {}
-export class ConflictError extends SiloError {}
-export class ValidationError extends SiloError {}
-export class GateError extends SiloError {}
-export class InternalError extends SiloError {}
+export class NotFoundError extends HolyshipError {}
+export class ConflictError extends HolyshipError {}
+export class ValidationError extends HolyshipError {}
+export class GateError extends HolyshipError {}
+export class InternalError extends HolyshipError {}

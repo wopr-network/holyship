@@ -88,7 +88,7 @@ CREATE TABLE "event_log" (
 	"watch_id" text,
 	"raw_event" text NOT NULL,
 	"action_taken" text,
-	"silo_response" text,
+	"holyship_response" text,
 	"created_at" bigint NOT NULL
 );
 --> statement-breakpoint
@@ -120,6 +120,8 @@ CREATE TABLE "flow_definitions" (
 	"default_model_tier" text,
 	"timeout_prompt" text,
 	"paused" boolean DEFAULT false,
+	"issue_tracker_integration_id" text,
+	"vcs_integration_id" text,
 	"created_at" bigint,
 	"updated_at" bigint
 );
@@ -143,6 +145,8 @@ CREATE TABLE "gate_definitions" (
 	"command" text,
 	"function_ref" text,
 	"api_config" jsonb,
+	"primitive_op" text,
+	"primitive_params" jsonb,
 	"timeout_ms" bigint,
 	"failure_prompt" text,
 	"timeout_prompt" text,
@@ -158,6 +162,17 @@ CREATE TABLE "gate_results" (
 	"passed" boolean NOT NULL,
 	"output" text,
 	"evaluated_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "integrations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"name" text NOT NULL,
+	"category" text NOT NULL,
+	"provider" text NOT NULL,
+	"credentials" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "invocations" (
@@ -179,6 +194,13 @@ CREATE TABLE "invocations" (
 	"error" text,
 	"ttl_ms" bigint DEFAULT 1800000,
 	"created_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "rate_limit_buckets" (
+	"key" text PRIMARY KEY NOT NULL,
+	"tokens" double precision NOT NULL,
+	"last_refill" bigint NOT NULL,
+	"updated_at" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "sources" (
@@ -262,6 +284,8 @@ ALTER TABLE "entity_history" ADD CONSTRAINT "entity_history_invocation_id_invoca
 ALTER TABLE "entity_map" ADD CONSTRAINT "entity_map_source_id_sources_id_fk" FOREIGN KEY ("source_id") REFERENCES "public"."sources"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_log" ADD CONSTRAINT "event_log_source_id_sources_id_fk" FOREIGN KEY ("source_id") REFERENCES "public"."sources"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_log" ADD CONSTRAINT "event_log_watch_id_watches_id_fk" FOREIGN KEY ("watch_id") REFERENCES "public"."watches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "flow_definitions" ADD CONSTRAINT "flow_definitions_issue_tracker_integration_id_integrations_id_fk" FOREIGN KEY ("issue_tracker_integration_id") REFERENCES "public"."integrations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "flow_definitions" ADD CONSTRAINT "flow_definitions_vcs_integration_id_integrations_id_fk" FOREIGN KEY ("vcs_integration_id") REFERENCES "public"."integrations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "flow_versions" ADD CONSTRAINT "flow_versions_flow_id_flow_definitions_id_fk" FOREIGN KEY ("flow_id") REFERENCES "public"."flow_definitions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gate_results" ADD CONSTRAINT "gate_results_entity_id_entities_id_fk" FOREIGN KEY ("entity_id") REFERENCES "public"."entities"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gate_results" ADD CONSTRAINT "gate_results_gate_id_gate_definitions_id_fk" FOREIGN KEY ("gate_id") REFERENCES "public"."gate_definitions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -279,10 +303,11 @@ CREATE INDEX "entities_parent_idx" ON "entities" USING btree ("parent_entity_id"
 CREATE INDEX "idx_entities_tenant_state" ON "entities" USING btree ("tenant_id","state");--> statement-breakpoint
 CREATE INDEX "idx_entities_tenant_flow" ON "entities" USING btree ("tenant_id","flow_id");--> statement-breakpoint
 CREATE INDEX "entity_activity_entity_id_idx" ON "entity_activity" USING btree ("entity_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "entity_activity_entity_seq_uniq" ON "entity_activity" USING btree ("entity_id","seq");--> statement-breakpoint
+CREATE UNIQUE INDEX "entity_activity_entity_seq_uniq" ON "entity_activity" USING btree ("tenant_id","entity_id","seq");--> statement-breakpoint
 CREATE INDEX "entity_history_entity_ts_idx" ON "entity_history" USING btree ("entity_id","timestamp");--> statement-breakpoint
 CREATE INDEX "entity_history_invocation_id_idx" ON "entity_history" USING btree ("invocation_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "entity_map_source_external_uniq" ON "entity_map" USING btree ("tenant_id","source_id","external_id");--> statement-breakpoint
+CREATE INDEX "entity_map_source_id_idx" ON "entity_map" USING btree ("source_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "entity_snapshots_entity_seq_idx" ON "entity_snapshots" USING btree ("entity_id","sequence");--> statement-breakpoint
 CREATE INDEX "entity_snapshots_entity_latest_idx" ON "entity_snapshots" USING btree ("entity_id","snapshot_at");--> statement-breakpoint
 CREATE INDEX "event_log_source_id_idx" ON "event_log" USING btree ("source_id");--> statement-breakpoint
@@ -293,11 +318,16 @@ CREATE INDEX "events_emitted_at_idx" ON "events" USING btree ("emitted_at");--> 
 CREATE INDEX "idx_events_tenant" ON "events" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_flow_tenant_name" ON "flow_definitions" USING btree ("tenant_id","name");--> statement-breakpoint
 CREATE INDEX "idx_flow_definitions_tenant" ON "flow_definitions" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_flow_definitions_issue_tracker" ON "flow_definitions" USING btree ("issue_tracker_integration_id");--> statement-breakpoint
+CREATE INDEX "idx_flow_definitions_vcs" ON "flow_definitions" USING btree ("vcs_integration_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_flow_version_tenant_flow_ver" ON "flow_versions" USING btree ("tenant_id","flow_id","version");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_gate_tenant_name" ON "gate_definitions" USING btree ("tenant_id","name");--> statement-breakpoint
 CREATE INDEX "idx_gate_definitions_tenant" ON "gate_definitions" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "gate_results_entity_id_idx" ON "gate_results" USING btree ("entity_id");--> statement-breakpoint
 CREATE INDEX "gate_results_gate_id_idx" ON "gate_results" USING btree ("gate_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_integration_tenant_name" ON "integrations" USING btree ("tenant_id","name");--> statement-breakpoint
+CREATE INDEX "idx_integrations_tenant" ON "integrations" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_integrations_tenant_category" ON "integrations" USING btree ("tenant_id","category");--> statement-breakpoint
 CREATE INDEX "invocations_entity_idx" ON "invocations" USING btree ("entity_id");--> statement-breakpoint
 CREATE INDEX "idx_invocations_tenant" ON "invocations" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_source_tenant_name" ON "sources" USING btree ("tenant_id","name");--> statement-breakpoint

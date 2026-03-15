@@ -6,7 +6,7 @@ import type { Db } from "../main.js";
 import { SeedFileSchema } from "./types.js";
 
 export interface LoadSeedDeps {
-  siloUrl: string;
+  holyshipUrl: string;
   db: Db;
   adminToken?: string;
 }
@@ -104,7 +104,7 @@ export async function loadSeed(seedPath: string, deps: LoadSeedDeps): Promise<Lo
       );
     }
     // PUT /api/flows/:id is idempotent — creates the flow if absent, updates it if already present.
-    const res = await fetch(`${deps.siloUrl}/api/flows/${encodeURIComponent(flow.name)}`, {
+    const res = await fetch(`${deps.holyshipUrl}/api/flows/${encodeURIComponent(flow.name)}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -137,7 +137,7 @@ export async function loadSeed(seedPath: string, deps: LoadSeedDeps): Promise<Lo
     });
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Failed to push flow "${flow.name}" to Silo: HTTP ${res.status}: ${body}`);
+      throw new Error(`Failed to push flow "${flow.name}" to Holyship: HTTP ${res.status}: ${body}`);
     }
   }
 

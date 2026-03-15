@@ -1,4 +1,4 @@
-# Silo
+# Holyship
 
 Unified flow engine + worker pool for agentic software engineering.
 

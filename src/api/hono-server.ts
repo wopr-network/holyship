@@ -1,8 +1,8 @@
 /**
- * Hono-based HTTP API server for silo.
+ * Hono-based HTTP API server for holyship.
  *
  * Replaces the old node:http + custom Router server.
- * Serves norad (dashboard), workers (claim/report), and admin tooling.
+ * Serves the dashboard, workers (claim/report), and admin tooling.
  */
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
@@ -99,7 +99,7 @@ export function mcpResultToResponse(result: {
       typeof body === "object" && body !== null && "message" in body ? (body as Record<string, unknown>).message : text;
     const msgStr = String(msg);
 
-    // Prefer typed error codes (set by callToolHandler when catching SiloError subclasses)
+    // Prefer typed error codes (set by callToolHandler when catching HolyshipError subclasses)
     if (result.errorCode === "NOT_FOUND") return { status: 404, body: { error: msgStr } };
     if (result.errorCode === "VALIDATION") return { status: 400, body: { error: msgStr } };
     if (result.errorCode === "CONFLICT") return { status: 409, body: { error: msgStr } };
@@ -316,7 +316,7 @@ export function createHonoApp(deps: HonoServerDeps): Hono {
     return async (c, next) => {
       const configuredToken = deps.workerToken?.trim() || undefined;
       if (!configuredToken) {
-        return c.json({ error: "Unauthorized: SILO_WORKER_TOKEN is not configured." }, 401);
+        return c.json({ error: "Unauthorized: HOLYSHIP_WORKER_TOKEN is not configured." }, 401);
       }
       const callerToken = extractBearerToken(c.req.header("authorization"));
       if (!callerToken || !tokensMatch(configuredToken, callerToken)) {
@@ -331,7 +331,7 @@ export function createHonoApp(deps: HonoServerDeps): Hono {
     return async (c, next) => {
       const configuredToken = deps.adminToken?.trim() || undefined;
       if (!configuredToken) {
-        return c.json({ error: "Unauthorized: SILO_ADMIN_TOKEN is not configured." }, 401);
+        return c.json({ error: "Unauthorized: HOLYSHIP_ADMIN_TOKEN is not configured." }, 401);
       }
       const callerToken = extractBearerToken(c.req.header("authorization"));
       if (!callerToken || !tokensMatch(configuredToken, callerToken)) {

@@ -559,7 +559,7 @@ git commit -m "feat: engine uses multi-repo gate evaluator"
 
 ## Chunk 3: Nuke Changes (Separate Repo)
 
-> These changes go in `~/nuke`, not `~/silo`. Separate PR.
+> These changes go in `~/nuke`, not `~/holyship`. Separate PR.
 
 ### Task 6: Update nuke checkout endpoint to handle repos array
 
@@ -627,10 +627,10 @@ Expected: `{ "worktrees": { "wopr-platform": "/workspace/test-123/wopr-platform"
 ```bash
 curl -X POST http://localhost:8080/checkout \
   -H "Content-Type: application/json" \
-  -d '{"repo": "wopr-network/silo"}'
+  -d '{"repo": "wopr-network/holyship"}'
 ```
 
-Expected: `{ "worktrees": { "silo": "/workspace/silo" } }`
+Expected: `{ "worktrees": { "holyship": "/workspace/holyship" } }`
 
 - [ ] **Step 4: Commit**
 
@@ -646,11 +646,11 @@ git commit -m "feat: checkout endpoint supports repos array for multi-repo entit
 
 | Task | Repo | What |
 |------|------|------|
-| 1 | silo | `extractReposFromDescription` returns array |
-| 2 | silo | Webhook handler passes `payload.repos` |
-| 3 | silo | Poller + run-loop use new extractor |
-| 4 | silo | `evaluateGateForAllRepos` — loops, ANDs |
-| 5 | silo | Engine wired to multi-repo evaluator |
+| 1 | holyship | `extractReposFromDescription` returns array |
+| 2 | holyship | Webhook handler passes `payload.repos` |
+| 3 | holyship | Poller + run-loop use new extractor |
+| 4 | holyship | `evaluateGateForAllRepos` — loops, ANDs |
+| 5 | holyship | Engine wired to multi-repo evaluator |
 | 6 | nuke | Checkout endpoint handles repos array |
 
 **Backwards compatible:** Single-repo issues produce `repos: ["wopr-network/whatever"]`. Loops run once. Gate scripts unchanged. Nuke accepts both `repo` (string) and `repos` (array).

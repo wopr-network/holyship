@@ -16,7 +16,7 @@ import {
 /**
  * Tenant-owned integrations: one row per connected provider instance.
  * A tenant may have multiple integrations of the same category (e.g. two GitHub orgs).
- * Credentials are AES-256-GCM encrypted at rest (SILO_ENCRYPTION_KEY).
+ * Credentials are AES-256-GCM encrypted at rest (HOLYSHIP_ENCRYPTION_KEY).
  */
 export const integrations = pgTable(
   "integrations",
@@ -94,7 +94,7 @@ export const stateDefinitions = pgTable(
     onEnter: jsonb("on_enter"),
     onExit: jsonb("on_exit"),
     retryAfterMs: bigint("retry_after_ms", { mode: "number" }),
-    /** Opaque metadata passed through to consumers. Silo stores but does not interpret. */
+    /** Opaque metadata passed through to consumers. Holyship stores but does not interpret. */
     meta: jsonb("meta"),
   },
   (table) => [uniqueIndex("uq_state_tenant_flow_name").on(table.tenantId, table.flowId, table.name)],
@@ -383,7 +383,7 @@ export const eventLog = pgTable(
     watchId: text("watch_id").references(() => watches.id, { onDelete: "cascade" }),
     rawEvent: text("raw_event").notNull(),
     actionTaken: text("action_taken"),
-    siloResponse: text("silo_response"),
+    holyshipResponse: text("holyship_response"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [index("event_log_source_id_idx").on(table.sourceId), index("event_log_watch_id_idx").on(table.watchId)],

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { SiloClient } from "../../src/silo-client/client.js";
+import { HolyshipClient } from "../../src/holyship-client/client.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -21,12 +21,12 @@ function mockFetchError(status: number) {
   });
 }
 
-describe("SiloClient", () => {
+describe("HolyshipClient", () => {
   const BASE = "http://localhost:3001";
 
   describe("constructor", () => {
     it("sets auth header when workerToken is provided", async () => {
-      const client = new SiloClient({ url: BASE, workerToken: "tok-123" });
+      const client = new HolyshipClient({ url: BASE, workerToken: "tok-123" });
       const claimBody = { next_action: "check_back", retry_after_ms: 1000, message: "none" };
       const fetchMock = mockFetchOk(claimBody);
       vi.stubGlobal("fetch", fetchMock);
@@ -42,7 +42,7 @@ describe("SiloClient", () => {
     });
 
     it("omits auth header when workerToken is not provided", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const claimBody = { next_action: "check_back", retry_after_ms: 1000, message: "none" };
       const fetchMock = mockFetchOk(claimBody);
       vi.stubGlobal("fetch", fetchMock);
@@ -56,7 +56,7 @@ describe("SiloClient", () => {
 
   describe("claim()", () => {
     it("POSTs to /api/claim with role in body", async () => {
-      const client = new SiloClient({ url: BASE, workerToken: "tok" });
+      const client = new HolyshipClient({ url: BASE, workerToken: "tok" });
       const body = {
         entity_id: "e-1",
         invocation_id: "inv-1",
@@ -82,7 +82,7 @@ describe("SiloClient", () => {
     });
 
     it("POSTs to /api/flows/{flow}/claim when flow is provided", async () => {
-      const client = new SiloClient({ url: BASE, workerToken: "tok" });
+      const client = new HolyshipClient({ url: BASE, workerToken: "tok" });
       const body = { next_action: "check_back", retry_after_ms: 5000, message: "wait" };
       const fetchMock = mockFetchOk(body);
       vi.stubGlobal("fetch", fetchMock);
@@ -96,7 +96,7 @@ describe("SiloClient", () => {
     });
 
     it("URL-encodes flow name with special characters", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "check_back",
         retry_after_ms: 1000,
@@ -113,7 +113,7 @@ describe("SiloClient", () => {
     });
 
     it("passes abort signal from opts", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "check_back",
         retry_after_ms: 1000,
@@ -131,7 +131,7 @@ describe("SiloClient", () => {
     });
 
     it("deserializes check_back response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const body = {
         next_action: "check_back" as const,
         retry_after_ms: 30000,
@@ -144,21 +144,21 @@ describe("SiloClient", () => {
     });
 
     it("throws on 4xx response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", mockFetchError(403));
 
       await expect(client.claim({ role: "coder" })).rejects.toThrow("flow.claim failed: 403");
     });
 
     it("throws on 5xx response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", mockFetchError(500));
 
       await expect(client.claim({ role: "coder" })).rejects.toThrow("flow.claim failed: 500");
     });
 
     it("throws on network error", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
 
       await expect(client.claim({ role: "coder" })).rejects.toThrow("fetch failed");
@@ -167,7 +167,7 @@ describe("SiloClient", () => {
 
   describe("createEntity()", () => {
     it("POSTs to /api/entities with flow mapped from flowName", async () => {
-      const client = new SiloClient({ url: BASE, workerToken: "tok" });
+      const client = new HolyshipClient({ url: BASE, workerToken: "tok" });
       const fetchMock = mockFetchOk({ id: "ent-1" });
       vi.stubGlobal("fetch", fetchMock);
 
@@ -185,7 +185,7 @@ describe("SiloClient", () => {
     });
 
     it("includes payload when provided", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({ id: "ent-2" });
       vi.stubGlobal("fetch", fetchMock);
 
@@ -197,7 +197,7 @@ describe("SiloClient", () => {
     });
 
     it("omits payload key when payload is undefined", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({ id: "ent-3" });
       vi.stubGlobal("fetch", fetchMock);
 
@@ -210,7 +210,7 @@ describe("SiloClient", () => {
     });
 
     it("applies AbortSignal.timeout to fetch", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({ id: "ent-4" });
       vi.stubGlobal("fetch", fetchMock);
 
@@ -222,7 +222,7 @@ describe("SiloClient", () => {
     });
 
     it("throws on 4xx response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", mockFetchError(422));
 
       await expect(client.createEntity({ flowName: "f" })).rejects.toThrow(
@@ -231,7 +231,7 @@ describe("SiloClient", () => {
     });
 
     it("throws on 5xx response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", mockFetchError(503));
 
       await expect(client.createEntity({ flowName: "f" })).rejects.toThrow(
@@ -240,7 +240,7 @@ describe("SiloClient", () => {
     });
 
     it("throws on network error", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
       await expect(client.createEntity({ flowName: "f" })).rejects.toThrow("Failed to fetch");
@@ -249,7 +249,7 @@ describe("SiloClient", () => {
 
   describe("report()", () => {
     it("POSTs to /api/entities/{id}/report with signal in body", async () => {
-      const client = new SiloClient({ url: BASE, workerToken: "tok" });
+      const client = new HolyshipClient({ url: BASE, workerToken: "tok" });
       const responseBody = {
         next_action: "continue",
         new_state: "reviewing",
@@ -273,7 +273,7 @@ describe("SiloClient", () => {
     });
 
     it("URL-encodes entityId", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "completed",
         new_state: "done",
@@ -291,7 +291,7 @@ describe("SiloClient", () => {
     });
 
     it("includes artifacts when provided", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "continue",
         new_state: "s",
@@ -312,7 +312,7 @@ describe("SiloClient", () => {
     });
 
     it("omits artifacts and worker_id keys when not provided", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "continue",
         new_state: "s",
@@ -331,7 +331,7 @@ describe("SiloClient", () => {
     });
 
     it("maps workerId (camelCase) to worker_id (snake_case) in body", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "continue",
         new_state: "s",
@@ -349,7 +349,7 @@ describe("SiloClient", () => {
     });
 
     it("passes abort signal from opts", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       const fetchMock = mockFetchOk({
         next_action: "completed",
         new_state: "done",
@@ -368,7 +368,7 @@ describe("SiloClient", () => {
     });
 
     it("throws on 4xx response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", mockFetchError(404));
 
       await expect(client.report({ entityId: "e-1", signal: "done" })).rejects.toThrow(
@@ -377,7 +377,7 @@ describe("SiloClient", () => {
     });
 
     it("throws on 5xx response", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", mockFetchError(502));
 
       await expect(client.report({ entityId: "e-1", signal: "done" })).rejects.toThrow(
@@ -386,7 +386,7 @@ describe("SiloClient", () => {
     });
 
     it("throws on network error", async () => {
-      const client = new SiloClient({ url: BASE });
+      const client = new HolyshipClient({ url: BASE });
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network down")));
 
       await expect(client.report({ entityId: "e-1", signal: "done" })).rejects.toThrow(

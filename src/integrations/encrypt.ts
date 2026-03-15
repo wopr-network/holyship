@@ -6,13 +6,13 @@ const IV_LENGTH = 12; // 96-bit IV recommended for GCM
 const TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const raw = process.env.SILO_ENCRYPTION_KEY?.trim();
+  const raw = process.env.HOLYSHIP_ENCRYPTION_KEY?.trim();
   if (!raw) {
-    throw new Error("SILO_ENCRYPTION_KEY is required for integration credential encryption");
+    throw new Error("HOLYSHIP_ENCRYPTION_KEY is required for integration credential encryption");
   }
   const buf = Buffer.from(raw, "hex");
   if (buf.length !== 32) {
-    throw new Error("SILO_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)");
+    throw new Error("HOLYSHIP_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)");
   }
   return buf;
 }

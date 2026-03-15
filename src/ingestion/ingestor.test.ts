@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { HolyshipClient } from "../holyship-client/client.js";
 import type { IEntityMapRepository } from "../radar-db/repos/entity-map-repo.js";
-import type { SiloClient } from "../silo-client/client.js";
 import { Ingestor } from "./ingestor.js";
 
 function makeEntityMapRepo(overrides: Partial<Record<keyof IEntityMapRepository, unknown>> = {}): IEntityMapRepository {
@@ -13,21 +13,21 @@ function makeEntityMapRepo(overrides: Partial<Record<keyof IEntityMapRepository,
   } as IEntityMapRepository;
 }
 
-function makeSiloClient(overrides: Partial<Record<keyof SiloClient, unknown>> = {}): SiloClient {
+function makeHolyshipClient(overrides: Partial<Record<keyof HolyshipClient, unknown>> = {}): HolyshipClient {
   return {
     createEntity: vi.fn().mockResolvedValue({ id: "entity-001" }),
     report: vi.fn().mockResolvedValue({ next_action: "continue", new_state: "working", prompt: null, context: null }),
     claim: vi.fn().mockResolvedValue({ retry_after_ms: 50 }),
     ...overrides,
-  } as unknown as SiloClient;
+  } as unknown as HolyshipClient;
 }
 
 describe("Ingestor", () => {
   describe("ingest() — type: new", () => {
     it("creates entity, updates sentinel, and fires signal", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -39,22 +39,22 @@ describe("Ingestor", () => {
       });
 
       expect(repo.insertIfAbsent).toHaveBeenCalledWith("linear", "WOP-100", "__pending__");
-      expect(silo.createEntity).toHaveBeenCalledWith({
+      expect(holyship.createEntity).toHaveBeenCalledWith({
         flowName: "engineering",
         payload: { title: "Fix bug" },
       });
       expect(repo.updateEntityId).toHaveBeenCalledWith("linear", "WOP-100", "entity-001");
-      expect(silo.report).toHaveBeenCalledWith({
+      expect(holyship.report).toHaveBeenCalledWith({
         entityId: "entity-001",
         signal: "start",
         artifacts: {},
       });
     });
 
-    it("skips silo.report when signal is not provided", async () => {
+    it("skips holyship.report when signal is not provided", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -63,15 +63,15 @@ describe("Ingestor", () => {
         flowName: "engineering",
       });
 
-      expect(silo.createEntity).toHaveBeenCalled();
+      expect(holyship.createEntity).toHaveBeenCalled();
       expect(repo.updateEntityId).toHaveBeenCalledWith("linear", "WOP-101", "entity-001");
-      expect(silo.report).not.toHaveBeenCalled();
+      expect(holyship.report).not.toHaveBeenCalled();
     });
 
     it("omits payload from createEntity when not provided", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -81,7 +81,7 @@ describe("Ingestor", () => {
         signal: "start",
       });
 
-      expect(silo.createEntity).toHaveBeenCalledWith({
+      expect(holyship.createEntity).toHaveBeenCalledWith({
         flowName: "engineering",
       });
     });
@@ -90,8 +90,8 @@ describe("Ingestor", () => {
   describe("ingest() — validation", () => {
     it("rejects payload missing sourceId", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(ingestor.ingest({ externalId: "X", type: "new", flowName: "eng" })).rejects.toThrow();
 
@@ -100,8 +100,8 @@ describe("Ingestor", () => {
 
     it("rejects payload missing externalId", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(ingestor.ingest({ sourceId: "linear", type: "new", flowName: "eng" })).rejects.toThrow();
 
@@ -110,8 +110,8 @@ describe("Ingestor", () => {
 
     it("rejects payload missing type", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(ingestor.ingest({ sourceId: "linear", externalId: "X", flowName: "eng" })).rejects.toThrow();
 
@@ -120,8 +120,8 @@ describe("Ingestor", () => {
 
     it("rejects payload missing flowName", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(ingestor.ingest({ sourceId: "linear", externalId: "X", type: "new" })).rejects.toThrow();
 
@@ -130,8 +130,8 @@ describe("Ingestor", () => {
 
     it("rejects payload with invalid type value", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(
         ingestor.ingest({
@@ -147,8 +147,8 @@ describe("Ingestor", () => {
 
     it("rejects empty string sourceId", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(
         ingestor.ingest({
@@ -164,8 +164,8 @@ describe("Ingestor", () => {
 
     it("rejects non-object input", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(ingestor.ingest("not an object")).rejects.toThrow();
       await expect(ingestor.ingest(null)).rejects.toThrow();
@@ -178,8 +178,8 @@ describe("Ingestor", () => {
   describe("ingest() — duplicate handling", () => {
     it("silently skips when insertIfAbsent returns false (lost race)", async () => {
       const repo = makeEntityMapRepo({ insertIfAbsent: vi.fn().mockResolvedValue(false) });
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -189,19 +189,19 @@ describe("Ingestor", () => {
         signal: "start",
       });
 
-      expect(silo.createEntity).not.toHaveBeenCalled();
-      expect(silo.report).not.toHaveBeenCalled();
+      expect(holyship.createEntity).not.toHaveBeenCalled();
+      expect(holyship.report).not.toHaveBeenCalled();
       expect(repo.updateEntityId).not.toHaveBeenCalled();
     });
   });
 
   describe("ingest() — error handling", () => {
-    it("re-throws when updateEntityId succeeds but silo.report fails", async () => {
+    it("re-throws when updateEntityId succeeds but holyship.report fails", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient({
+      const holyship = makeHolyshipClient({
         report: vi.fn().mockRejectedValue(new Error("flow.report failed: 503")),
       });
-      const ingestor = new Ingestor(repo, silo);
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(
         ingestor.ingest({
@@ -214,7 +214,7 @@ describe("Ingestor", () => {
       ).rejects.toThrow("flow.report failed: 503");
 
       expect(repo.updateEntityId).toHaveBeenCalledWith("linear", "WOP-100", "entity-001");
-      expect(silo.report).toHaveBeenCalledWith({
+      expect(holyship.report).toHaveBeenCalledWith({
         entityId: "entity-001",
         signal: "start",
         artifacts: {},
@@ -223,10 +223,10 @@ describe("Ingestor", () => {
 
     it("cleans up sentinel and re-throws when createEntity fails", async () => {
       const repo = makeEntityMapRepo();
-      const silo = makeSiloClient({
+      const holyship = makeHolyshipClient({
         createEntity: vi.fn().mockRejectedValue(new Error("entity create failed: 400")),
       });
-      const ingestor = new Ingestor(repo, silo);
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(
         ingestor.ingest({
@@ -241,7 +241,7 @@ describe("Ingestor", () => {
       expect(repo.insertIfAbsent).toHaveBeenCalledWith("linear", "WOP-100", "__pending__");
       expect(repo.deleteRow).toHaveBeenCalledWith("linear", "WOP-100");
       expect(repo.updateEntityId).not.toHaveBeenCalled();
-      expect(silo.report).not.toHaveBeenCalled();
+      expect(holyship.report).not.toHaveBeenCalled();
     });
   });
 
@@ -250,8 +250,8 @@ describe("Ingestor", () => {
       const repo = makeEntityMapRepo({
         findEntityId: vi.fn().mockResolvedValue("entity-001"),
       });
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -263,7 +263,7 @@ describe("Ingestor", () => {
       });
 
       expect(repo.findEntityId).toHaveBeenCalledWith("linear", "WOP-100");
-      expect(silo.report).toHaveBeenCalledWith({
+      expect(holyship.report).toHaveBeenCalledWith({
         entityId: "entity-001",
         signal: "review_passed",
         artifacts: { approved: true },
@@ -274,8 +274,8 @@ describe("Ingestor", () => {
       const repo = makeEntityMapRepo({
         findEntityId: vi.fn().mockResolvedValue("entity-001"),
       });
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -284,7 +284,7 @@ describe("Ingestor", () => {
         flowName: "engineering",
       });
 
-      expect(silo.report).toHaveBeenCalledWith({
+      expect(holyship.report).toHaveBeenCalledWith({
         entityId: "entity-001",
         signal: "update",
         artifacts: {},
@@ -295,8 +295,8 @@ describe("Ingestor", () => {
       const repo = makeEntityMapRepo({
         findEntityId: vi.fn().mockResolvedValue(undefined),
       });
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await ingestor.ingest({
         sourceId: "linear",
@@ -306,15 +306,15 @@ describe("Ingestor", () => {
         signal: "review_passed",
       });
 
-      expect(silo.report).not.toHaveBeenCalled();
+      expect(holyship.report).not.toHaveBeenCalled();
     });
 
     it("throws when entity is still pending creation", async () => {
       const repo = makeEntityMapRepo({
         findEntityId: vi.fn().mockResolvedValue("__pending__"),
       });
-      const silo = makeSiloClient();
-      const ingestor = new Ingestor(repo, silo);
+      const holyship = makeHolyshipClient();
+      const ingestor = new Ingestor(repo, holyship);
 
       await expect(
         ingestor.ingest({
@@ -326,7 +326,7 @@ describe("Ingestor", () => {
         }),
       ).rejects.toThrow("still being created");
 
-      expect(silo.report).not.toHaveBeenCalled();
+      expect(holyship.report).not.toHaveBeenCalled();
     });
   });
 });

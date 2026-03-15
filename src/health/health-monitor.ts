@@ -1,18 +1,18 @@
+import type { HolyshipClient } from "../holyship-client/client.js";
 import { logger } from "../logger.js";
 import type { Pool } from "../pool/pool.js";
-import type { SiloClient } from "../silo-client/client.js";
 import type { HealthMonitorConfig } from "./types.js";
 
 export class HealthMonitor {
   private pool: Pool;
-  private silo: SiloClient;
+  private holyship: HolyshipClient;
   private config: HealthMonitorConfig;
   private timer: ReturnType<typeof setInterval> | null = null;
   private checking = false;
 
-  constructor(pool: Pool, silo: SiloClient, config: HealthMonitorConfig) {
+  constructor(pool: Pool, holyship: HolyshipClient, config: HealthMonitorConfig) {
     this.pool = pool;
-    this.silo = silo;
+    this.holyship = holyship;
     this.config = config;
   }
 
@@ -48,7 +48,7 @@ export class HealthMonitor {
 
       if (slot.entityId) {
         try {
-          await this.silo.report({
+          await this.holyship.report({
             entityId: slot.entityId,
             signal: "fail",
             artifacts: { reason: "worker_timeout" },

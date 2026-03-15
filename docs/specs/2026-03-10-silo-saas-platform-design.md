@@ -1,11 +1,11 @@
-# Silo SaaS Platform Design
+# Holyship SaaS Platform Design
 
 **Date:** 2026-03-10
 **Status:** Approved
 
 ## Overview
 
-Silo is an AI engineering SaaS product. Customers connect their issue tracker on the left and their revision control system on the right. Silo's AI agents pick up issues, write code, open PRs, and ship product — for a fixed subscription cost plus pay-as-you-go inference.
+Holyship is an AI engineering SaaS product. Customers connect their issue tracker on the left and their revision control system on the right. Holyship's AI agents pick up issues, write code, open PRs, and ship product — for a fixed subscription cost plus pay-as-you-go inference.
 
 WOPR is tenant #1, dog-fooding its own product.
 
@@ -15,7 +15,7 @@ WOPR is tenant #1, dog-fooding its own product.
 @wopr-network/platform-core    (new — extracted from wopr-platform)
          ↑                ↑
          |                |
-   wopr-platform      silo (product)
+   wopr-platform      holyship (product)
    (WOPR fleet)      (AI engineering SaaS)
 ```
 
@@ -40,7 +40,7 @@ Shared platform layer extracted from wopr-platform. Published to npm. Contains:
 
 Exports factory functions, not singletons. Each consumer configures their own instances.
 
-### @wopr-network/silo (engine)
+### @wopr-network/holyship (engine)
 
 Flow engine. Modified from current state:
 
@@ -62,9 +62,9 @@ WOPR fleet management product. Modified to import platform-core instead of ownin
 - P2P/container networking (DHT, discovery, network policies)
 - Chat backends, node agent, backup/snapshots
 
-### silo (product, formerly cheyenne-mountain)
+### holyship (product, formerly cheyenne-mountain)
 
-The deployed AI engineering SaaS. Imports platform-core + silo engine. Contains:
+The deployed AI engineering SaaS. Imports platform-core + holyship engine. Contains:
 
 - OAuth integration layer (Linear, GitHub, Jira)
 - Customer onboarding and flow template provisioning
@@ -106,15 +106,15 @@ Exact pricing TBD.
 
 ### Managed Workers
 
-- Run in silo's infrastructure
+- Run in holyship's infrastructure
 - Claim work from the shared pool for their assigned tenant
-- Use silo's API keys for Claude inference
+- Use holyship's API keys for Claude inference
 - Token usage metered via `MeterEmitter`, debited from tenant's credit balance
 - Allocated per-tenant based on plan tier (dedicated capacity, no noisy-neighbor)
 
 ### Self-hosted Workers
 
-- Customer installs worker on their own infrastructure: `npx @wopr-network/silo worker --endpoint https://silo.dev/api --token <tenant-scoped-token>`
+- Customer installs worker on their own infrastructure: `npx @wopr-network/holyship worker --endpoint https://holyship.dev/api --token <tenant-scoped-token>`
 - Authenticates with tenant-scoped token — can only claim that tenant's work
 - Git operations happen on customer's machine — code never leaves their network
 - Claude API calls use customer's own Anthropic key (BYOK via credential vault)
@@ -124,10 +124,10 @@ Exact pricing TBD.
 
 | Concern | Managed | Self-hosted |
 |---------|---------|-------------|
-| Code access | Silo infrastructure | Never leaves customer network |
-| API keys | Silo provides | Customer's own (BYOK) |
+| Code access | Holyship infrastructure | Never leaves customer network |
+| API keys | Holyship provides | Customer's own (BYOK) |
 | Git credentials | OAuth tokens stored in vault | Customer's local git config |
-| Compliance | Trust silo | Full customer control |
+| Compliance | Trust holyship | Full customer control |
 
 ## Source Integrations
 
@@ -135,13 +135,13 @@ MVP: Linear + GitHub + Jira, all with OAuth connect.
 
 - Customer clicks "Connect Linear" → OAuth flow → tokens stored in credential vault
 - Webhook endpoints registered on customer's project
-- Inbound webhooks validated via per-source HMAC (already built in silo)
+- Inbound webhooks validated via per-source HMAC (already built in holyship)
 - Tenant resolved from integration config
 - Issue events ingested as entities into the tenant's configured flow
 
 ## Delivery Modes (Configurable Per Tenant)
 
-Silo's flow definition system already supports this. Each mode is a different flow template:
+Holyship's flow definition system already supports this. Each mode is a different flow template:
 
 - **PR only** — agent opens a PR, customer reviews and merges
 - **PR + review cycle** — agent opens PR, responds to review comments, iterates until approved
@@ -150,7 +150,7 @@ Silo's flow definition system already supports this. Each mode is a different fl
 
 ## Database Architecture
 
-Single Postgres database shared by platform-core tables and silo engine tables.
+Single Postgres database shared by platform-core tables and holyship engine tables.
 
 - Platform tables: tenants, credit_transactions, credit_balances, user_roles, org_memberships, rate_limit_entries, webhook_seen_events, etc.
 - Engine tables: flow_definitions, state_definitions, gate_definitions, transition_rules, entities, invocations, gate_results, entity_history, events, domain_events, sources, watches, workers, entity_activity, etc.
@@ -164,7 +164,7 @@ Customer's issue tracker (Linear/GitHub/Jira)
          │ webhook
          ▼
    ┌─────────────────────────────────────┐
-   │  Silo Product API                    │
+   │  Holyship Product API                    │
    │  (Hono + tRPC + platform-core)       │
    │                                      │
    │  ┌──────────┐  ┌─────────────────┐  │
@@ -176,7 +176,7 @@ Customer's issue tracker (Linear/GitHub/Jira)
    │  │ (Linear, GitHub, Jira OAuth) │    │
    │  └──────────────────────────────┘    │
    │  ┌──────────────────────────────┐    │
-   │  │ Silo Engine (in-process)     │    │
+   │  │ Holyship Engine (in-process)     │    │
    │  │ (multi-tenant, Postgres)     │    │
    │  └──────────────────────────────┘    │
    └──────────────────┬──────────────────┘
@@ -211,18 +211,18 @@ For each module (auth → tenancy → billing → credits → metering → rate 
 
 Series of small, safe commits. wopr-platform never loses functionality.
 
-### Phase 2: Silo engine Postgres migration
+### Phase 2: Holyship engine Postgres migration
 
 - Add Postgres Drizzle dialect alongside SQLite
 - Migrate schema table by table with tests
 - `tenant_id` column added to all core tables
 - Repository layer gets tenant filtering on every method
-- Existing silo tests adapted to run against Postgres (PGlite or test containers)
+- Existing holyship tests adapted to run against Postgres (PGlite or test containers)
 
-### Phase 3: Silo product assembly
+### Phase 3: Holyship product assembly
 
-- cheyenne-mountain repo renamed to silo (the product)
-- Import platform-core + silo engine
+- cheyenne-mountain repo renamed to holyship (the product)
+- Import platform-core + holyship engine
 - Wire: auth, tenancy, billing, integration layer (Linear/GitHub/Jira OAuth)
 - Flow templates for customer onboarding
 - Worker registration (managed + self-hosted)
@@ -248,7 +248,7 @@ Each phase is independently shippable.
 Tenant isolation uses scoped repository factories, not per-method parameters. The product layer resolves `tenantId` from the authenticated token, then creates scoped repositories:
 
 ```typescript
-// Product layer (silo or wopr-platform)
+// Product layer (holyship or wopr-platform)
 const tenantId = resolveFromToken(request)
 const repos = engine.scopedRepos(tenantId)
 // repos.flows.getByName("changeset") -- automatically filtered
@@ -269,13 +269,13 @@ The engine itself has no auth dependency. It receives `tenantId` as a parameter 
 
 ### 4. SQLite dropped, Postgres only
 
-The SQLite dialect is not maintained alongside Postgres. Silo engine migrates fully to Postgres (`pgTable` schema, `pg` driver). The SQLite schema is deleted. Existing single-tenant SQLite deployments (cheyenne-mountain) migrate via a one-time data export/import.
+The SQLite dialect is not maintained alongside Postgres. Holyship engine migrates fully to Postgres (`pgTable` schema, `pg` driver). The SQLite schema is deleted. Existing single-tenant SQLite deployments (cheyenne-mountain) migrate via a one-time data export/import.
 
 Tests use PGlite (in-process Postgres, no external dependency, fast). This matches wopr-platform's test infrastructure.
 
 ### 5. Migration coordination: engine owns its schema namespace
 
-Platform-core and silo engine each own their own Drizzle migration directory. Both target the same Postgres database but use separate migration tracking tables (`platform_migrations` and `engine_migrations`). No cross-package schema dependencies — they share a database, not a schema namespace. The product layer runs both migration sets at startup in order: platform-core first (tenants table must exist), then engine.
+Platform-core and holyship engine each own their own Drizzle migration directory. Both target the same Postgres database but use separate migration tracking tables (`platform_migrations` and `engine_migrations`). No cross-package schema dependencies — they share a database, not a schema namespace. The product layer runs both migration sets at startup in order: platform-core first (tenants table must exist), then engine.
 
 ### 6. Data migration for existing deployments
 
@@ -287,7 +287,7 @@ Phase 2 includes a data migration script that:
 
 ### 7. Metering integration point
 
-Metering happens in the product layer's dispatcher wrapper, not in the engine. The silo product wraps the engine's dispatcher with a metering decorator:
+Metering happens in the product layer's dispatcher wrapper, not in the engine. The holyship product wraps the engine's dispatcher with a metering decorator:
 
 ```typescript
 class MeteredDispatcher implements IDispatcher {
@@ -304,7 +304,7 @@ For self-hosted workers (BYOK), the product layer does not wrap with metering �
 
 ### 8. Platform-core versioning
 
-Platform-core follows semver. Both wopr-platform and silo pin to the same major version. Minor/patch updates are non-breaking. Major version bumps require coordinated upgrades across both consumers. CI for platform-core runs both consumers' test suites before publishing.
+Platform-core follows semver. Both wopr-platform and holyship pin to the same major version. Minor/patch updates are non-breaking. Major version bumps require coordinated upgrades across both consumers. CI for platform-core runs both consumers' test suites before publishing.
 
 ## Key Design Decisions
 

@@ -41,4 +41,4 @@ export async function bootstrap(url = DATABASE_URL): Promise<{
 
 export * from "./api/wire-types.js";
 export * from "./engine/index.js";
-export { ConflictError, GateError, InternalError, NotFoundError, SiloError, ValidationError } from "./errors.js";
+export { ConflictError, GateError, HolyshipError, InternalError, NotFoundError, ValidationError } from "./errors.js";

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript 5.9, same stack as wopr-platform
 
-**Spec:** `docs/specs/2026-03-10-silo-saas-platform-design.md` — Phase 4
+**Spec:** `docs/specs/2026-03-10-holyship-saas-platform-design.md` — Phase 4
 
 **Depends on:** Plan 1 (platform-core published to npm).
 

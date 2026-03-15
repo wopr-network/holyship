@@ -59,28 +59,28 @@ const validSeed = {
 };
 
 // CLI subprocess tests that require a running Postgres instance are skipped
-// in unit-test mode. They run in integration-test mode with SILO_DB_URL set.
-const hasPostgres = !!process.env.SILO_DB_URL;
+// in unit-test mode. They run in integration-test mode with HOLYSHIP_DB_URL set.
+const hasPostgres = !!process.env.HOLYSHIP_DB_URL;
 
 describe("CLI", () => {
   it.skipIf(!hasPostgres)("init --seed loads a seed file", () => {
     const seedPath = writeSeedFile(validSeed);
-    const output = run(["init", "--seed", seedPath, "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
+    const output = run(["init", "--seed", seedPath, "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
     expect(output).toContain("flows: 1");
     expect(output).toContain("gates: 1");
   });
 
   it.skipIf(!hasPostgres)("init --seed --force drops existing data first", () => {
     const seedPath = writeSeedFile(validSeed);
-    run(["init", "--seed", seedPath, "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
-    const output = run(["init", "--seed", seedPath, "--force", "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
+    run(["init", "--seed", seedPath, "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
+    const output = run(["init", "--seed", seedPath, "--force", "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
     expect(output).toContain("flows: 1");
   });
 
   it.skipIf(!hasPostgres)("export outputs valid JSON to stdout", () => {
     const seedPath = writeSeedFile(validSeed);
-    run(["init", "--seed", seedPath, "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
-    const output = run(["export", "--db-url", process.env.SILO_DB_URL!]);
+    run(["init", "--seed", seedPath, "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
+    const output = run(["export", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     const parsed = JSON.parse(output);
     expect(parsed.flows).toHaveLength(1);
   });
@@ -88,8 +88,8 @@ describe("CLI", () => {
   it.skipIf(!hasPostgres)("export --out writes to file", { timeout: 15000 }, () => {
     const seedPath = writeSeedFile(validSeed);
     const outPath = join(tmpdir(), `cli-export-${Date.now()}.json`);
-    run(["init", "--seed", seedPath, "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
-    run(["export", "--out", outPath, "--db-url", process.env.SILO_DB_URL!]);
+    run(["init", "--seed", seedPath, "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
+    run(["export", "--out", outPath, "--db-url", process.env.HOLYSHIP_DB_URL!]);
     const content = readFileSync(outPath, "utf-8");
     const parsed = JSON.parse(content);
     expect(parsed.flows).toHaveLength(1);
@@ -111,13 +111,13 @@ describe("CLI", () => {
 
   it.skipIf(!hasPostgres)("SSE server returns CORS headers for localhost origin", async () => {
     const seedPath = writeSeedFile(validSeed);
-    const dbUrl = process.env.SILO_DB_URL!;
+    const dbUrl = process.env.HOLYSHIP_DB_URL!;
     try {
-      run(["init", "--seed", seedPath, "--db-url", dbUrl], { SILO_SEED_ROOT: tmpdir() });
+      run(["init", "--seed", seedPath, "--db-url", dbUrl], { HOLYSHIP_SEED_ROOT: tmpdir() });
 
       const child = execFile("npx", ["tsx", CLI, "serve", "--transport", "sse", "--port", "0", "--mcp-only", "--db-url", dbUrl], {
         cwd: join(import.meta.dirname, "../.."),
-        env: { ...process.env, SILO_DB_URL: dbUrl, SILO_ADMIN_TOKEN: "test-token", SILO_WORKER_TOKEN: "test-worker-token" },
+        env: { ...process.env, HOLYSHIP_DB_URL: dbUrl, HOLYSHIP_ADMIN_TOKEN: "test-token", HOLYSHIP_WORKER_TOKEN: "test-worker-token" },
       });
 
       let port: number | undefined;
@@ -175,15 +175,15 @@ describe("CLI", () => {
 
   it.skipIf(!hasPostgres)("status prints table for initialized db", () => {
     const seedPath = writeSeedFile(validSeed);
-    run(["init", "--seed", seedPath, "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
-    const output = run(["status", "--db-url", process.env.SILO_DB_URL!]);
+    run(["init", "--seed", seedPath, "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
+    const output = run(["status", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     expect(output).toContain("pr-review");
   });
 
   it.skipIf(!hasPostgres)("status --json outputs valid JSON", { timeout: 15000 }, () => {
     const seedPath = writeSeedFile(validSeed);
-    run(["init", "--seed", seedPath, "--db-url", process.env.SILO_DB_URL!], { SILO_SEED_ROOT: tmpdir() });
-    const output = run(["status", "--json", "--db-url", process.env.SILO_DB_URL!]);
+    run(["init", "--seed", seedPath, "--db-url", process.env.HOLYSHIP_DB_URL!], { HOLYSHIP_SEED_ROOT: tmpdir() });
+    const output = run(["status", "--json", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     const parsed = JSON.parse(output);
     expect(parsed).toHaveProperty("flows");
   }, 15000);
@@ -267,19 +267,19 @@ describe("validateAdminToken", () => {
   it("throws when HTTP is active and no admin token", () => {
     expect(() =>
       validateAdminToken({ adminToken: undefined, startHttp: true, transport: "stdio" }),
-    ).toThrow("SILO_ADMIN_TOKEN must be set");
+    ).toThrow("HOLYSHIP_ADMIN_TOKEN must be set");
   });
 
   it("throws when SSE transport and no admin token", () => {
     expect(() =>
       validateAdminToken({ adminToken: undefined, startHttp: false, transport: "sse" }),
-    ).toThrow("SILO_ADMIN_TOKEN must be set");
+    ).toThrow("HOLYSHIP_ADMIN_TOKEN must be set");
   });
 
   it("throws when token is whitespace-only with HTTP active", () => {
     expect(() =>
       validateAdminToken({ adminToken: "   ", startHttp: true, transport: "stdio" }),
-    ).toThrow("SILO_ADMIN_TOKEN must be set");
+    ).toThrow("HOLYSHIP_ADMIN_TOKEN must be set");
   });
 
   it("does not throw for stdio-only without token", () => {
@@ -303,7 +303,7 @@ describe("validateAdminToken", () => {
   it("handles transport with mixed case and whitespace", () => {
     expect(() =>
       validateAdminToken({ adminToken: undefined, startHttp: false, transport: "  SSE  " }),
-    ).toThrow("SILO_ADMIN_TOKEN must be set");
+    ).toThrow("HOLYSHIP_ADMIN_TOKEN must be set");
   });
 });
 
@@ -311,19 +311,19 @@ describe("validateWorkerToken", () => {
   it("throws when HTTP is active and no worker token", () => {
     expect(() =>
       validateWorkerToken({ workerToken: undefined, startHttp: true, transport: "stdio" }),
-    ).toThrow("SILO_WORKER_TOKEN must be set");
+    ).toThrow("HOLYSHIP_WORKER_TOKEN must be set");
   });
 
   it("throws when SSE transport and no worker token", () => {
     expect(() =>
       validateWorkerToken({ workerToken: undefined, startHttp: false, transport: "sse" }),
-    ).toThrow("SILO_WORKER_TOKEN must be set");
+    ).toThrow("HOLYSHIP_WORKER_TOKEN must be set");
   });
 
   it("throws when token is whitespace-only with HTTP active", () => {
     expect(() =>
       validateWorkerToken({ workerToken: "   ", startHttp: true, transport: "stdio" }),
-    ).toThrow("SILO_WORKER_TOKEN must be set");
+    ).toThrow("HOLYSHIP_WORKER_TOKEN must be set");
   });
 
   it("does not throw for stdio-only without token", () => {
@@ -341,33 +341,33 @@ describe("validateWorkerToken", () => {
   it("handles transport with mixed case and whitespace", () => {
     expect(() =>
       validateWorkerToken({ workerToken: undefined, startHttp: false, transport: "  SSE  " }),
-    ).toThrow("SILO_WORKER_TOKEN must be set");
+    ).toThrow("HOLYSHIP_WORKER_TOKEN must be set");
   });
 });
 
 describe("CLI validation", () => {
   it.skipIf(!hasPostgres)("serve rejects non-numeric --reaper-interval", () => {
-    const output = runExpectFail(["serve", "--reaper-interval", "abc", "--db-url", process.env.SILO_DB_URL!]);
+    const output = runExpectFail(["serve", "--reaper-interval", "abc", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     expect(output).toMatch(/reaper-interval/i);
   });
 
   it.skipIf(!hasPostgres)("serve rejects --reaper-interval below 1000", () => {
-    const output = runExpectFail(["serve", "--reaper-interval", "500", "--db-url", process.env.SILO_DB_URL!]);
+    const output = runExpectFail(["serve", "--reaper-interval", "500", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     expect(output).toMatch(/reaper-interval/i);
   });
 
   it.skipIf(!hasPostgres)("serve rejects non-numeric --claim-ttl", () => {
-    const output = runExpectFail(["serve", "--claim-ttl", "abc", "--db-url", process.env.SILO_DB_URL!]);
+    const output = runExpectFail(["serve", "--claim-ttl", "abc", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     expect(output).toMatch(/claim-ttl/i);
   });
 
   it.skipIf(!hasPostgres)("serve rejects --claim-ttl below 5000", () => {
-    const output = runExpectFail(["serve", "--claim-ttl", "1000", "--db-url", process.env.SILO_DB_URL!]);
+    const output = runExpectFail(["serve", "--claim-ttl", "1000", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     expect(output).toMatch(/claim-ttl/i);
   });
 
   it.skipIf(!hasPostgres)("serve rejects --http-only and --mcp-only together", () => {
-    const output = runExpectFail(["serve", "--http-only", "--mcp-only", "--db-url", process.env.SILO_DB_URL!]);
+    const output = runExpectFail(["serve", "--http-only", "--mcp-only", "--db-url", process.env.HOLYSHIP_DB_URL!]);
     expect(output).toMatch(/http-only.*mcp-only|Cannot use/i);
   });
 

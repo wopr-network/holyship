@@ -1,8 +1,8 @@
 /**
  * IFlowEngine — the contract between the worker run-loop and the engine.
  *
- * Replaces the HTTP boundary (SiloClient) with a direct in-process call.
- * Both SiloClient (remote) and DirectFlowEngine (local) implement this.
+ * Replaces the HTTP boundary (HolyshipClient) with a direct in-process call.
+ * Both HolyshipClient (remote) and DirectFlowEngine (local) implement this.
  */
 import type { ClaimResponse, ReportResponse } from "../api/wire-types.js";
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript 5.9, Drizzle ORM (Postgres), Hono, tRPC v11, better-auth, Stripe SDK, Resend, Vitest
 
-**Spec:** `docs/specs/2026-03-10-silo-saas-platform-design.md`
+**Spec:** `docs/specs/2026-03-10-holyship-saas-platform-design.md`
 
 **Extraction order rationale:** The spec lists modules alphabetically. This plan reorders them topologically — schema first (no deps), then config, encryption, credits, metering, email, auth, tenancy, billing, rate limiting, credential vault, middleware, tRPC. Each module depends only on previously extracted modules.
 

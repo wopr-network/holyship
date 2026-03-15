@@ -1,16 +1,16 @@
-# Silo Product Assembly — Implementation Plan
+# Holyship Product Assembly — Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Transform the cheyenne-mountain repo into the silo SaaS product — wrapping the silo engine with platform-core (auth, billing, tenancy) and adding OAuth integrations (Linear, GitHub, Jira), customer onboarding, worker registration (managed + self-hosted), and metered inference billing.
+**Goal:** Transform the cheyenne-mountain repo into the holyship SaaS product — wrapping the holyship engine with platform-core (auth, billing, tenancy) and adding OAuth integrations (Linear, GitHub, Jira), customer onboarding, worker registration (managed + self-hosted), and metered inference billing.
 
-**Architecture:** cheyenne-mountain (renamed to silo product) imports `@wopr-network/platform-core` for auth/billing/tenancy and `@wopr-network/silo` for the flow engine. The product API is a Hono + tRPC server that resolves tenant from auth, creates scoped engine repos, and proxies to the engine. WOPR is loaded as tenant #1 with its existing flows.
+**Architecture:** cheyenne-mountain (renamed to holyship product) imports `@wopr-network/platform-core` for auth/billing/tenancy and `@wopr-network/holyship` for the flow engine. The product API is a Hono + tRPC server that resolves tenant from auth, creates scoped engine repos, and proxies to the engine. WOPR is loaded as tenant #1 with its existing flows.
 
-**Tech Stack:** TypeScript 5.9, Hono, tRPC v11, platform-core (better-auth, Stripe, Drizzle Postgres), silo engine (Postgres, scoped repos), Vitest
+**Tech Stack:** TypeScript 5.9, Hono, tRPC v11, platform-core (better-auth, Stripe, Drizzle Postgres), holyship engine (Postgres, scoped repos), Vitest
 
-**Spec:** `docs/specs/2026-03-10-silo-saas-platform-design.md`
+**Spec:** `docs/specs/2026-03-10-holyship-saas-platform-design.md`
 
-**Depends on:** Plan 1 (platform-core published) and Plan 2 (silo engine on Postgres with multi-tenancy).
+**Depends on:** Plan 1 (platform-core published) and Plan 2 (holyship engine on Postgres with multi-tenancy).
 
 ---
 
@@ -21,7 +21,7 @@ cheyenne-mountain is pure config today — no application code:
 - Gate scripts: `seed/gates/*.sh`
 - Agent roles: `agents/*.md`
 - onEnter scripts: `seed/scripts/*.js`
-- Docker: `Dockerfile.silo`, `docker-compose.yml`, entrypoint script
+- Docker: `Dockerfile.holyship`, `docker-compose.yml`, entrypoint script
 - Documentation: `docs/`
 
 The product API layer is entirely new code.
@@ -33,7 +33,7 @@ The product API layer is entirely new code.
 ### Task 1: Rename repo and initialize product package
 
 **Files:**
-- Rename: repo from cheyenne-mountain to silo-product (or keep cheyenne-mountain as the repo name and just update package.json)
+- Rename: repo from cheyenne-mountain to holyship-product (or keep cheyenne-mountain as the repo name and just update package.json)
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `src/index.ts`
@@ -50,7 +50,7 @@ pnpm init
 
 ```json
 {
-  "name": "@wopr-network/silo-product",
+  "name": "@wopr-network/holyship-product",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -67,7 +67,7 @@ pnpm init
 - [ ] **Step 3: Install dependencies**
 
 ```bash
-pnpm add @wopr-network/platform-core @wopr-network/silo
+pnpm add @wopr-network/platform-core @wopr-network/holyship
 pnpm add hono @hono/node-server @trpc/server drizzle-orm pg postgres zod better-auth stripe resend
 pnpm add -D typescript vitest @biomejs/biome tsx @types/pg @electric-sql/pglite
 ```
@@ -93,7 +93,7 @@ import { createApp } from "./api/app.js";
 const port = Number(process.env.PORT ?? 3001);
 const app = await createApp();
 serve({ fetch: app.fetch, port });
-console.log(`Silo product API listening on :${port}`);
+console.log(`Holyship product API listening on :${port}`);
 ```
 
 - [ ] **Step 7: Scaffold empty Hono app**
@@ -118,7 +118,7 @@ pnpm build && node dist/index.js
 - [ ] **Step 9: Commit**
 
 ```bash
-git add -A && git commit -m "feat: scaffold silo product API"
+git add -A && git commit -m "feat: scaffold holyship product API"
 ```
 
 ---
@@ -139,7 +139,7 @@ import { platformConfigSchema } from "@wopr-network/platform-core/config";
 export const config = platformConfigSchema.parse(process.env);
 ```
 
-Extend with silo-product-specific config (OAuth client IDs, etc.) as needed.
+Extend with holyship-product-specific config (OAuth client IDs, etc.) as needed.
 
 - [ ] **Step 2: Create database initialization**
 
@@ -148,7 +148,7 @@ Extend with silo-product-specific config (OAuth client IDs, etc.) as needed.
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { platformSchema } from "@wopr-network/platform-core/db";
-import { siloSchema } from "@wopr-network/silo";
+import { siloSchema } from "@wopr-network/holyship";
 
 // Merge platform + engine schemas
 const schema = { ...platformSchema, ...siloSchema };
@@ -183,11 +183,11 @@ export async function createApp() {
 
 - [ ] **Step 4: Run migrations at startup**
 
-Both platform-core and silo engine migrations run in sequence:
+Both platform-core and holyship engine migrations run in sequence:
 
 ```typescript
 import { runPlatformMigrations } from "@wopr-network/platform-core/db";
-import { runEngineMigrations } from "@wopr-network/silo";
+import { runEngineMigrations } from "@wopr-network/holyship";
 
 await runPlatformMigrations(db);
 await runEngineMigrations(db);
@@ -210,7 +210,7 @@ git add -A && git commit -m "feat: wire platform-core auth and tenancy"
 
 ## Chunk 2: Engine Integration + Tenant Provisioning
 
-### Task 3: Wire silo engine into the product API
+### Task 3: Wire holyship engine into the product API
 
 **Files:**
 - Create: `src/engine/index.ts`
@@ -221,7 +221,7 @@ git add -A && git commit -m "feat: wire platform-core auth and tenancy"
 
 ```typescript
 // src/engine/index.ts
-import { createScopedRepos, Engine } from "@wopr-network/silo";
+import { createScopedRepos, Engine } from "@wopr-network/holyship";
 import type { Db } from "../db/index.js";
 
 // Cache engines per tenant — Engine construction involves repo setup.
@@ -250,7 +250,7 @@ export function getTenantEngine(db: Db, tenantId: string): Engine {
 
 - [ ] **Step 2: Create engine API routes**
 
-Expose silo's REST API scoped by tenant. The auth middleware resolves tenantId, then routes proxy to a tenant-scoped engine:
+Expose holyship's REST API scoped by tenant. The auth middleware resolves tenantId, then routes proxy to a tenant-scoped engine:
 
 ```typescript
 // src/api/routes/engine.ts
@@ -395,7 +395,7 @@ export async function bootstrapWoprTenant(db: Db, tenantId: string) {
   // Load WOPR seed data (the existing seed/flows.json)
   const seed = JSON.parse(await readFile("./seed/flows.json", "utf-8"));
   // Seed everything into the WOPR tenant namespace
-  // ... (reuse silo's seed loader with tenant scoping)
+  // ... (reuse holyship's seed loader with tenant scoping)
 }
 ```
 
@@ -459,7 +459,7 @@ export function githubOAuthRoutes(db: Db) {
 ```typescript
 // src/integrations/github/webhooks.ts
 export async function handleGitHubWebhook(payload: any, tenantId: string, engine: Engine) {
-  if (payload.action === "labeled" && payload.label.name === "silo") {
+  if (payload.action === "labeled" && payload.label.name === "holyship") {
     // Create entity in tenant's flow
     await engine.createEntity("default-flow", {
       repo: payload.repository.full_name,
@@ -492,10 +492,10 @@ git add -A && git commit -m "feat: GitHub OAuth integration"
 - Create: `src/integrations/linear/oauth.ts`
 - Create: `src/integrations/linear/webhooks.ts`
 
-Same pattern as GitHub but using Linear's OAuth API and webhook format. silo already has a Linear source adapter (`src/sources/linear.ts`) — reuse the webhook validation (HMAC) from there.
+Same pattern as GitHub but using Linear's OAuth API and webhook format. holyship already has a Linear source adapter (`src/sources/linear.ts`) — reuse the webhook validation (HMAC) from there.
 
 - [ ] **Step 1: Linear OAuth flow**
-- [ ] **Step 2: Linear webhook handler** (reuse silo's `handleLinearWebhook` pattern)
+- [ ] **Step 2: Linear webhook handler** (reuse holyship's `handleLinearWebhook` pattern)
 - [ ] **Step 3: Mount routes and test**
 - [ ] **Step 4: Commit**
 
@@ -528,7 +528,7 @@ git add -A && git commit -m "feat: Jira OAuth integration"
 
 ### Task 9: Self-hosted worker registration
 
-Customers install the silo worker CLI and register with a tenant-scoped token.
+Customers install the holyship worker CLI and register with a tenant-scoped token.
 
 **Files:**
 - Create: `src/workers/registration.ts`
@@ -581,7 +581,7 @@ app.post("/api/workers/register", tenantAuth, async (c) => {
   return c.json({
     token,
     endpoint: `${BASE_URL}/api/engine`,
-    command: `npx @wopr-network/silo worker --endpoint ${BASE_URL}/api/engine --token ${token}`,
+    command: `npx @wopr-network/holyship worker --endpoint ${BASE_URL}/api/engine --token ${token}`,
   });
 });
 ```
@@ -629,7 +629,7 @@ git add -A && git commit -m "feat: self-hosted worker registration with tenant-s
 
 ### Task 10: Metered dispatcher for managed workers
 
-When silo's managed workers dispatch to Claude, we meter the token usage and debit the tenant's credit balance.
+When holyship's managed workers dispatch to Claude, we meter the token usage and debit the tenant's credit balance.
 
 **Files:**
 - Create: `src/workers/metered-dispatcher.ts`
@@ -655,7 +655,7 @@ describe("MeteredDispatcher", () => {
 
 ```typescript
 // src/workers/metered-dispatcher.ts
-import type { IDispatcher } from "@wopr-network/silo";
+import type { IDispatcher } from "@wopr-network/holyship";
 import type { MeterEmitter } from "@wopr-network/platform-core/metering";
 
 export class MeteredDispatcher implements IDispatcher {
@@ -750,13 +750,13 @@ git add -A && git commit -m "feat: billing routes (Stripe checkout + credit bala
 ### Task 12: Update Docker setup for the product
 
 **Files:**
-- Update: `Dockerfile.silo` → serves product API instead of raw silo CLI
+- Update: `Dockerfile.holyship` → serves product API instead of raw holyship CLI
 - Update: `docker-compose.yml`
 - Update: `cheyenne-mountain-entrypoint.sh`
 
 - [ ] **Step 1: Update Dockerfile**
 
-The container now runs the product API (which embeds the silo engine) instead of the raw silo CLI:
+The container now runs the product API (which embeds the holyship engine) instead of the raw holyship CLI:
 
 ```dockerfile
 FROM node:24-alpine
@@ -779,19 +779,19 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: silo
-      POSTGRES_USER: silo
-      POSTGRES_PASSWORD: silo
+      POSTGRES_DB: holyship
+      POSTGRES_USER: holyship
+      POSTGRES_PASSWORD: holyship
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  silo:
+  holyship:
     build: .
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://silo:silo@postgres:5432/silo
+      DATABASE_URL: postgresql://holyship:holyship@postgres:5432/holyship
       # ... auth, stripe, integration keys
     ports:
       - "3001:3001"
@@ -853,7 +853,7 @@ Verify WOPR gate scripts, agent files, and flow integrity still pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -A && git commit -m "feat: silo product assembly complete"
+git add -A && git commit -m "feat: holyship product assembly complete"
 ```
 
 ---
@@ -869,7 +869,7 @@ git add -A && git commit -m "feat: silo product assembly complete"
 | 5 | 12-13 | Docker deployment, E2E validation |
 
 **Key patterns:**
-- Product API wraps silo engine with auth/billing from platform-core
+- Product API wraps holyship engine with auth/billing from platform-core
 - Tenant resolved from session/token → scoped repos → engine
 - WOPR is tenant #1, bootstrapped from existing seed data
 - Self-hosted workers authenticate with tenant-scoped tokens
