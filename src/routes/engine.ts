@@ -53,7 +53,7 @@ export function createEngineRoutes(deps: EngineRouteDeps): Hono {
     const role = (body.role as string) ?? "engineering";
     const result = await deps.engine.claimWork(role, undefined, workerId);
     if (!result) {
-      return c.json({ check_back: true, retry_after_ms: 30_000 }, 200);
+      return c.json({ next_action: "check_back", retry_after_ms: 30_000, message: "No work available" }, 200);
     }
     return c.json(result, 200);
   });
@@ -66,7 +66,7 @@ export function createEngineRoutes(deps: EngineRouteDeps): Hono {
     const role = (body.role as string) ?? "engineering";
     const result = await deps.engine.claimWork(role, flowName, workerId);
     if (!result) {
-      return c.json({ check_back: true, retry_after_ms: 30_000 }, 200);
+      return c.json({ next_action: "check_back", retry_after_ms: 30_000, message: "No work available" }, 200);
     }
     return c.json(result, 200);
   });

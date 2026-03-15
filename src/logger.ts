@@ -23,34 +23,30 @@ export const noopLogger: Logger = {
 
 const _pino = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
+function toMeta(args: unknown[]): Record<string, unknown> | undefined {
+  if (args.length === 0) return undefined;
+  if (args.length === 1 && typeof args[0] === "object" && args[0] !== null) {
+    return args[0] as Record<string, unknown>;
+  }
+  return { args };
+}
+
 /** Logger instance backed by pino, conforming to the Logger interface. */
 export const logger: Logger = {
   error: (msg, ...args) => {
-    if (args.length > 0 && typeof args[0] === "object" && args[0] !== null) {
-      _pino.error(args[0] as Record<string, unknown>, msg);
-    } else {
-      _pino.error(msg);
-    }
+    const meta = toMeta(args);
+    meta ? _pino.error(meta, msg) : _pino.error(msg);
   },
   warn: (msg, ...args) => {
-    if (args.length > 0 && typeof args[0] === "object" && args[0] !== null) {
-      _pino.warn(args[0] as Record<string, unknown>, msg);
-    } else {
-      _pino.warn(msg);
-    }
+    const meta = toMeta(args);
+    meta ? _pino.warn(meta, msg) : _pino.warn(msg);
   },
   info: (msg, ...args) => {
-    if (args.length > 0 && typeof args[0] === "object" && args[0] !== null) {
-      _pino.info(args[0] as Record<string, unknown>, msg);
-    } else {
-      _pino.info(msg);
-    }
+    const meta = toMeta(args);
+    meta ? _pino.info(meta, msg) : _pino.info(msg);
   },
   debug: (msg, ...args) => {
-    if (args.length > 0 && typeof args[0] === "object" && args[0] !== null) {
-      _pino.debug(args[0] as Record<string, unknown>, msg);
-    } else {
-      _pino.debug(msg);
-    }
+    const meta = toMeta(args);
+    meta ? _pino.debug(meta, msg) : _pino.debug(msg);
   },
 };
