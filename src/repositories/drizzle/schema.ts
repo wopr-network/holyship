@@ -1,15 +1,4 @@
-import {
-  bigint,
-  boolean,
-  doublePrecision,
-  index,
-  jsonb,
-  pgTable,
-  serial,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { bigint, boolean, index, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 // ─── Integration Tables ───
 
@@ -336,130 +325,19 @@ export const entitySnapshots = pgTable(
   ],
 );
 
-// ─── Legacy tables (to be removed) ───
+// ─── GitHub App ───
 
-export const sources = pgTable(
-  "sources",
+export const githubInstallations = pgTable(
+  "github_installations",
   {
     id: text("id").primaryKey(),
     tenantId: text("tenant_id").notNull(),
-    name: text("name").notNull(),
-    type: text("type").notNull(),
-    config: text("config").notNull(),
-    enabled: boolean("enabled").notNull().default(true),
-    createdAt: bigint("created_at", { mode: "number" }).notNull(),
-    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
-  },
-  (table) => [uniqueIndex("uq_source_tenant_name").on(table.tenantId, table.name)],
-);
-
-export const watches = pgTable(
-  "watches",
-  {
-    id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
-    sourceId: text("source_id")
-      .notNull()
-      .references(() => sources.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    filter: text("filter").notNull(),
-    action: text("action").notNull(),
-    actionConfig: text("action_config").notNull(),
-    enabled: boolean("enabled").notNull().default(true),
-    createdAt: bigint("created_at", { mode: "number" }).notNull(),
-    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
-  },
-  (table) => [index("watches_source_id_idx").on(table.sourceId)],
-);
-
-export const eventLog = pgTable(
-  "event_log",
-  {
-    id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
-    sourceId: text("source_id")
-      .notNull()
-      .references(() => sources.id, { onDelete: "cascade" }),
-    watchId: text("watch_id").references(() => watches.id, { onDelete: "cascade" }),
-    rawEvent: text("raw_event").notNull(),
-    actionTaken: text("action_taken"),
-    holyshipResponse: text("holyship_response"),
+    installationId: bigint("installation_id", { mode: "number" }).notNull(),
+    accountLogin: text("account_login").notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
-  (table) => [index("event_log_source_id_idx").on(table.sourceId), index("event_log_watch_id_idx").on(table.watchId)],
-);
-
-export const workers = pgTable("workers", {
-  id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
-  name: text("name").notNull(),
-  type: text("type").notNull(),
-  discipline: text("discipline").notNull(),
-  status: text("status").notNull().default("idle"),
-  config: text("config"),
-  lastHeartbeat: bigint("last_heartbeat", { mode: "number" }).notNull(),
-  createdAt: bigint("created_at", { mode: "number" }).notNull(),
-});
-
-export const entityActivity = pgTable(
-  "entity_activity",
-  {
-    id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
-    entityId: text("entity_id").notNull(),
-    slotId: text("slot_id").notNull(),
-    seq: bigint("seq", { mode: "number" }).notNull(),
-    type: text("type").notNull(),
-    data: text("data").notNull(),
-    createdAt: bigint("created_at", { mode: "number" }).notNull(),
-  },
-  (t) => [
-    index("entity_activity_entity_id_idx").on(t.entityId),
-    uniqueIndex("entity_activity_entity_seq_uniq").on(t.tenantId, t.entityId, t.seq),
+  (table) => [
+    index("github_installations_tenant_idx").on(table.tenantId),
+    uniqueIndex("github_installations_installation_uniq").on(table.installationId),
   ],
 );
-
-export const throughputEvents = pgTable(
-  "throughput_events",
-  {
-    id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
-    outcome: text("outcome").notNull(),
-    durationMs: bigint("duration_ms", { mode: "number" }).notNull(),
-    createdAt: bigint("created_at", { mode: "number" }).notNull(),
-  },
-  (t) => [index("throughput_events_created_at_idx").on(t.createdAt)],
-);
-
-export const entityMap = pgTable(
-  "entity_map",
-  {
-    id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
-    sourceId: text("source_id")
-      .notNull()
-      .references(() => sources.id, { onDelete: "cascade" }),
-    externalId: text("external_id").notNull(),
-    entityId: text("entity_id").notNull(),
-    createdAt: bigint("created_at", { mode: "number" }).notNull(),
-  },
-  (t) => [
-    uniqueIndex("entity_map_source_external_uniq").on(t.tenantId, t.sourceId, t.externalId),
-    // Separate index on sourceId for efficient FK cascade deletes from sources table.
-    index("entity_map_source_id_idx").on(t.sourceId),
-  ],
-);
-
-// ─── Rate Limiting Table ───
-
-/**
- * Persistent token-bucket state for rate limiting.
- * Key format: "<limiter_name>:<ip>" — one row per (limiter, client IP).
- * Replaces in-memory Maps to satisfy the "no in-memory stores" codebase convention.
- */
-export const rateLimitBuckets = pgTable("rate_limit_buckets", {
-  key: text("key").primaryKey(),
-  tokens: doublePrecision("tokens").notNull(),
-  lastRefill: bigint("last_refill", { mode: "number" }).notNull(),
-  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
-});
