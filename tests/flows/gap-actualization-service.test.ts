@@ -166,4 +166,35 @@ describe("GapActualizationService", () => {
     expect(results).toHaveLength(1);
     expect(results[0].issueNumber).toBe(51);
   });
+
+  it("still returns issue if linkGapToIssue fails (idempotency)", async () => {
+    vi.mocked(interrogation.getGaps).mockResolvedValue(SAMPLE_GAPS);
+    vi.mocked(interrogation.linkGapToIssue).mockRejectedValueOnce(new Error("DB connection lost"));
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ number: 60, html_url: "https://github.com/org/app/issues/60" }), {
+        status: 201,
+      }),
+    );
+
+    // Should NOT throw — issue was created on GitHub, link failure is logged
+    const result = await service.createIssueFromGap("org/app", "g-1");
+    expect(result.issueNumber).toBe(60);
+    expect(result.issueUrl).toBe("https://github.com/org/app/issues/60");
+  });
+
+  it("batch does not re-fetch gaps per iteration (no N+1)", async () => {
+    vi.mocked(interrogation.getGaps).mockResolvedValue(SAMPLE_GAPS);
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 70, html_url: "url1" }), { status: 201 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 71, html_url: "url2" }), { status: 201 }),
+      );
+
+    await service.createIssuesFromAllGaps("org/app");
+
+    // getGaps should be called exactly once (by createIssuesFromAllGaps), not per gap
+    expect(interrogation.getGaps).toHaveBeenCalledTimes(1);
+  });
 });

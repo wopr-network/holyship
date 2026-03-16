@@ -6,7 +6,11 @@
  */
 
 import { Hono } from "hono";
-import type { GapActualizationService } from "../flows/gap-actualization-service.js";
+import {
+  type GapActualizationService,
+  GapAlreadyActualizedError,
+  GapNotFoundError,
+} from "../flows/gap-actualization-service.js";
 import type { InterrogationService } from "../flows/interrogation-service.js";
 
 export interface InterrogationRouteDeps {
@@ -108,8 +112,9 @@ export function createInterrogationRoutes(deps: InterrogationRouteDeps): Hono {
       return c.json(result, 201);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const status = message.includes("not found") || message.includes("already has") ? 400 : 500;
-      return c.json({ error: message }, status);
+      if (err instanceof GapNotFoundError) return c.json({ error: message }, 404);
+      if (err instanceof GapAlreadyActualizedError) return c.json({ error: message }, 409);
+      return c.json({ error: message }, 500);
     }
   });
 
@@ -126,7 +131,8 @@ export function createInterrogationRoutes(deps: InterrogationRouteDeps): Hono {
 
     try {
       const results = await deps.gapActualizationService.createIssuesFromAllGaps(repoFullName, { createEntity });
-      return c.json({ repo: repoFullName, created: results.length, issues: results }, 201);
+      const statusCode = results.length > 0 ? 201 : 200;
+      return c.json({ repo: repoFullName, created: results.length, issues: results }, statusCode);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return c.json({ error: message }, 500);

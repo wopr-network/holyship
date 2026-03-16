@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInterrogationRoutes } from "../../src/routes/interrogation.js";
-import type { GapActualizationService } from "../../src/flows/gap-actualization-service.js";
+import { GapAlreadyActualizedError, type GapActualizationService, GapNotFoundError } from "../../src/flows/gap-actualization-service.js";
 import type { InterrogationService } from "../../src/flows/interrogation-service.js";
 
 function mockService(): InterrogationService {
@@ -210,5 +210,58 @@ describe("createInterrogationRoutes", () => {
     const body = await res.json();
     expect(body.created).toBe(2);
     expect(body.issues).toHaveLength(2);
+  });
+
+  it("POST create-issue returns 404 for GapNotFoundError", async () => {
+    const svc = mockService();
+    const gapSvc = {
+      createIssueFromGap: vi.fn().mockRejectedValue(new GapNotFoundError("g-99", "org/app")),
+      createIssuesFromAllGaps: vi.fn(),
+    } as unknown as GapActualizationService;
+
+    const app = createInterrogationRoutes({ interrogationService: svc, gapActualizationService: gapSvc });
+    const res = await app.request("/repos/org/app/gaps/g-99/create-issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("POST create-issue returns 409 for GapAlreadyActualizedError", async () => {
+    const svc = mockService();
+    const gapSvc = {
+      createIssueFromGap: vi.fn().mockRejectedValue(new GapAlreadyActualizedError("g-1", "https://github.com/org/app/issues/5")),
+      createIssuesFromAllGaps: vi.fn(),
+    } as unknown as GapActualizationService;
+
+    const app = createInterrogationRoutes({ interrogationService: svc, gapActualizationService: gapSvc });
+    const res = await app.request("/repos/org/app/gaps/g-1/create-issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("POST create-all returns 200 when no gaps created", async () => {
+    const svc = mockService();
+    const gapSvc = {
+      createIssueFromGap: vi.fn(),
+      createIssuesFromAllGaps: vi.fn().mockResolvedValue([]),
+    } as unknown as GapActualizationService;
+
+    const app = createInterrogationRoutes({ interrogationService: svc, gapActualizationService: gapSvc });
+    const res = await app.request("/repos/org/app/gaps/create-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.created).toBe(0);
   });
 });

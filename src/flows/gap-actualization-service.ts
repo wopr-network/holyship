@@ -11,6 +11,21 @@ import { logger } from "../logger.js";
 import type { Gap } from "./interrogation-prompt.js";
 import type { InterrogationService } from "./interrogation-service.js";
 
+/** Typed errors for clean HTTP status mapping. */
+export class GapNotFoundError extends Error {
+  constructor(gapId: string, repo: string) {
+    super(`Gap ${gapId} not found for repo ${repo}`);
+    this.name = "GapNotFoundError";
+  }
+}
+
+export class GapAlreadyActualizedError extends Error {
+  constructor(gapId: string, issueUrl: string | null) {
+    super(`Gap ${gapId} already has an issue: ${issueUrl}`);
+    this.name = "GapAlreadyActualizedError";
+  }
+}
+
 export interface GapActualizationConfig {
   interrogationService: InterrogationService;
   engine: Engine;
@@ -31,6 +46,8 @@ const PRIORITY_LABELS: Record<string, string> = {
   low: "priority: low",
 };
 
+type GapWithId = Gap & { id: string; status: string; issueUrl: string | null };
+
 export class GapActualizationService {
   private readonly interrogationService: InterrogationService;
   private readonly engine: Engine;
@@ -50,37 +67,92 @@ export class GapActualizationService {
     gapId: string,
     options?: { createEntity?: boolean },
   ): Promise<CreatedIssue> {
-    const tag = "[gap-actualize]";
     const [owner, repo] = repoFullName.split("/");
     if (!owner || !repo) {
       throw new Error(`Invalid repo name: ${repoFullName}`);
     }
 
-    // Get the gap
     const gaps = await this.interrogationService.getGaps(repoFullName);
     const gap = gaps.find((g) => g.id === gapId);
-    if (!gap) {
-      throw new Error(`Gap ${gapId} not found for repo ${repoFullName}`);
-    }
-    if (gap.status === "issue_created") {
-      throw new Error(`Gap ${gapId} already has an issue: ${gap.issueUrl}`);
-    }
+    if (!gap) throw new GapNotFoundError(gapId, repoFullName);
+    if (gap.status === "issue_created") throw new GapAlreadyActualizedError(gapId, gap.issueUrl);
 
     const token = await this.getGithubToken();
-    if (!token) {
-      throw new Error("No GitHub token available");
+    if (!token) throw new Error("No GitHub token available");
+
+    return this.actualizeSingleGap(repoFullName, owner, repo, token, gap, options);
+  }
+
+  /**
+   * Create issues for all open gaps in a repo. Fetches gaps once — no N+1.
+   */
+  async createIssuesFromAllGaps(repoFullName: string, options?: { createEntity?: boolean }): Promise<CreatedIssue[]> {
+    const [owner, repo] = repoFullName.split("/");
+    if (!owner || !repo) {
+      throw new Error(`Invalid repo name: ${repoFullName}`);
     }
+
+    const gaps = await this.interrogationService.getGaps(repoFullName);
+    const openGaps = gaps.filter((g) => g.status === "open");
+    if (openGaps.length === 0) return [];
+
+    const token = await this.getGithubToken();
+    if (!token) throw new Error("No GitHub token available");
+
+    const results: CreatedIssue[] = [];
+    for (const gap of openGaps) {
+      try {
+        const result = await this.actualizeSingleGap(repoFullName, owner, repo, token, gap, options);
+        results.push(result);
+      } catch (err) {
+        logger.error("[gap-actualize] failed for gap", {
+          gapId: gap.id,
+          capability: gap.capability,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Core logic: create issue, link, optionally create entity.
+   * Accepts a pre-fetched gap — no extra DB queries.
+   * Links the issue immediately after GitHub creation for idempotency.
+   */
+  private async actualizeSingleGap(
+    repoFullName: string,
+    owner: string,
+    repo: string,
+    token: string,
+    gap: GapWithId,
+    options?: { createEntity?: boolean },
+  ): Promise<CreatedIssue> {
+    const tag = "[gap-actualize]";
 
     // Create GitHub issue
     logger.info(`${tag} creating issue`, { repo: repoFullName, gap: gap.title });
     const issue = await this.createGitHubIssue(owner, repo, token, gap);
 
-    // Link back to gap
-    await this.interrogationService.linkGapToIssue(gapId, repoFullName, issue.html_url);
-    logger.info(`${tag} issue linked`, { gapId, issueUrl: issue.html_url });
+    // Link immediately — even if entity creation fails later, the gap is marked.
+    // This prevents duplicate GitHub issues on retry.
+    try {
+      await this.interrogationService.linkGapToIssue(gap.id, repoFullName, issue.html_url);
+    } catch (linkErr) {
+      // Log but don't throw — the issue already exists on GitHub.
+      // Next retry will see status=issue_created and skip.
+      logger.error(`${tag} link failed after issue created`, {
+        gapId: gap.id,
+        issueUrl: issue.html_url,
+        error: linkErr instanceof Error ? linkErr.message : String(linkErr),
+      });
+    }
+
+    logger.info(`${tag} issue linked`, { gapId: gap.id, issueUrl: issue.html_url });
 
     const result: CreatedIssue = {
-      gapId,
+      gapId: gap.id,
       issueNumber: issue.number,
       issueUrl: issue.html_url,
     };
@@ -98,7 +170,6 @@ export class GapActualizationService {
         result.entityId = entity.id;
         logger.info(`${tag} entity created`, { entityId: entity.id, issueNumber: issue.number });
       } catch (err) {
-        // Entity creation failure shouldn't fail the issue creation
         logger.warn(`${tag} entity creation failed (issue still created)`, {
           error: err instanceof Error ? err.message : String(err),
         });
@@ -106,34 +177,6 @@ export class GapActualizationService {
     }
 
     return result;
-  }
-
-  /**
-   * Create issues for all open gaps in a repo.
-   */
-  async createIssuesFromAllGaps(repoFullName: string, options?: { createEntity?: boolean }): Promise<CreatedIssue[]> {
-    const gaps = await this.interrogationService.getGaps(repoFullName);
-    const openGaps = gaps.filter((g) => g.status === "open");
-
-    if (openGaps.length === 0) {
-      return [];
-    }
-
-    const results: CreatedIssue[] = [];
-    for (const gap of openGaps) {
-      try {
-        const result = await this.createIssueFromGap(repoFullName, gap.id, options);
-        results.push(result);
-      } catch (err) {
-        logger.error("[gap-actualize] failed for gap", {
-          gapId: gap.id,
-          capability: gap.capability,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    return results;
   }
 
   /**
