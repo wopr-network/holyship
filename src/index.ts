@@ -337,7 +337,36 @@ async function main() {
   if (hasGitHubApp) {
     app.get("/api/github/repos", async (c) => {
       try {
-        const installations = await installationRepo.listByTenant(tenantId);
+        let installations = await installationRepo.listByTenant(tenantId);
+        // Auto-sync from GitHub if DB has no installations
+        if (installations.length === 0) {
+          const { generateAppJwt } = await import("./github/token-generator.js");
+          const jwt = generateAppJwt(config.GITHUB_APP_ID as string, config.GITHUB_APP_PRIVATE_KEY as string);
+          const syncRes = await fetch("https://api.github.com/app/installations", {
+            headers: {
+              Authorization: `Bearer ${jwt}`,
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+          });
+          if (syncRes.ok) {
+            const ghInstalls = (await syncRes.json()) as {
+              id: number;
+              account: { login: string; type: string };
+            }[];
+            for (const inst of ghInstalls) {
+              await installationRepo.upsert({
+                tenantId,
+                installationId: inst.id,
+                accountLogin: inst.account.login,
+                accountType: inst.account.type,
+                accessToken: null,
+                tokenExpiresAt: null,
+              });
+            }
+            installations = await installationRepo.listByTenant(tenantId);
+          }
+        }
         if (installations.length === 0) {
           return c.json({ repositories: [] });
         }
@@ -365,6 +394,44 @@ async function main() {
         return c.json({ repositories: [], error: (err as Error).message }, 500);
       }
     });
+    // Sync installations from GitHub API (no webhook needed)
+    app.post("/api/github/sync-installations", async (c) => {
+      try {
+        const { generateAppJwt } = await import("./github/token-generator.js");
+        const jwt = generateAppJwt(config.GITHUB_APP_ID as string, config.GITHUB_APP_PRIVATE_KEY as string);
+        const res = await fetch("https://api.github.com/app/installations", {
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        });
+        if (!res.ok) {
+          return c.json({ error: `GitHub API ${res.status}` }, 502);
+        }
+        const installations = (await res.json()) as {
+          id: number;
+          account: { login: string; type: string };
+        }[];
+        let synced = 0;
+        for (const inst of installations) {
+          await installationRepo.upsert({
+            tenantId,
+            installationId: inst.id,
+            accountLogin: inst.account.login,
+            accountType: inst.account.type,
+            accessToken: null,
+            tokenExpiresAt: null,
+          });
+          synced++;
+        }
+        return c.json({ synced, installations: installations.length });
+      } catch (err) {
+        logger.error("Failed to sync installations", (err as Error).message);
+        return c.json({ error: (err as Error).message }, 500);
+      }
+    });
+
     logger.info("GitHub repos endpoint mounted");
   }
 
