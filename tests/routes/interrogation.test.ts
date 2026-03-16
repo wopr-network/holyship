@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInterrogationRoutes } from "../../src/routes/interrogation.js";
+import type { GapActualizationService } from "../../src/flows/gap-actualization-service.js";
 import type { InterrogationService } from "../../src/flows/interrogation-service.js";
 
 function mockService(): InterrogationService {
@@ -133,5 +134,81 @@ describe("createInterrogationRoutes", () => {
     });
 
     expect(res.status).toBe(400);
+  });
+
+  it("POST /repos/:owner/:repo/gaps/:gapId/create-issue creates issue", async () => {
+    const svc = mockService();
+    const gapSvc = {
+      createIssueFromGap: vi.fn().mockResolvedValue({
+        gapId: "g-1",
+        issueNumber: 42,
+        issueUrl: "https://github.com/org/app/issues/42",
+      }),
+      createIssuesFromAllGaps: vi.fn(),
+    } as unknown as GapActualizationService;
+
+    const app = createInterrogationRoutes({ interrogationService: svc, gapActualizationService: gapSvc });
+    const res = await app.request("/repos/org/app/gaps/g-1/create-issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.issueNumber).toBe(42);
+    expect(gapSvc.createIssueFromGap).toHaveBeenCalledWith("org/app", "g-1", { createEntity: false });
+  });
+
+  it("POST create-issue passes create_entity flag", async () => {
+    const svc = mockService();
+    const gapSvc = {
+      createIssueFromGap: vi.fn().mockResolvedValue({ gapId: "g-1", issueNumber: 42, issueUrl: "url" }),
+      createIssuesFromAllGaps: vi.fn(),
+    } as unknown as GapActualizationService;
+
+    const app = createInterrogationRoutes({ interrogationService: svc, gapActualizationService: gapSvc });
+    await app.request("/repos/org/app/gaps/g-1/create-issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ create_entity: true }),
+    });
+
+    expect(gapSvc.createIssueFromGap).toHaveBeenCalledWith("org/app", "g-1", { createEntity: true });
+  });
+
+  it("POST create-issue returns 501 when service not configured", async () => {
+    const svc = mockService();
+    const app = createInterrogationRoutes({ interrogationService: svc });
+    const res = await app.request("/repos/org/app/gaps/g-1/create-issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(501);
+  });
+
+  it("POST /repos/:owner/:repo/gaps/create-all creates all issues", async () => {
+    const svc = mockService();
+    const gapSvc = {
+      createIssueFromGap: vi.fn(),
+      createIssuesFromAllGaps: vi.fn().mockResolvedValue([
+        { gapId: "g-1", issueNumber: 50, issueUrl: "url1" },
+        { gapId: "g-2", issueNumber: 51, issueUrl: "url2" },
+      ]),
+    } as unknown as GapActualizationService;
+
+    const app = createInterrogationRoutes({ interrogationService: svc, gapActualizationService: gapSvc });
+    const res = await app.request("/repos/org/app/gaps/create-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(2);
+    expect(body.issues).toHaveLength(2);
   });
 });
