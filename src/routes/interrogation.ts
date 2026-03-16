@@ -70,6 +70,9 @@ export function createInterrogationRoutes(deps: InterrogationRouteDeps): Hono {
 
   // POST /repos/:owner/:repo/gaps/:gapId/link-issue — link gap to created issue
   app.post("/repos/:owner/:repo/gaps/:gapId/link-issue", async (c) => {
+    const owner = c.req.param("owner");
+    const repo = c.req.param("repo");
+    const repoFullName = `${owner}/${repo}`;
     const gapId = c.req.param("gapId");
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const issueUrl = body.issue_url as string;
@@ -78,7 +81,7 @@ export function createInterrogationRoutes(deps: InterrogationRouteDeps): Hono {
     }
 
     try {
-      await deps.interrogationService.linkGapToIssue(gapId, issueUrl);
+      await deps.interrogationService.linkGapToIssue(gapId, repoFullName, issueUrl);
       return c.json({ ok: true }, 200);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

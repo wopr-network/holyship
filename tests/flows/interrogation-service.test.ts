@@ -39,7 +39,13 @@ function mockDb() {
         const tableName = table._.name as keyof typeof store;
         const rowArray = Array.isArray(rows) ? rows : [rows];
         store[tableName]?.push(...rowArray);
-        return Promise.resolve();
+        // Support both plain insert (gaps) and upsert chain (configs)
+        return {
+          then: (resolve: (v: unknown) => void) => resolve(undefined),
+          onConflictDoUpdate: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: rowArray[0]?.id ?? "generated-id" }]),
+          }),
+        };
       }),
     })),
     select: vi.fn().mockImplementation(() => ({
@@ -199,14 +205,16 @@ describe("InterrogationService", () => {
     fetchSpy.mockRestore();
   });
 
-  it("upserts when config already exists", async () => {
-    // Mock DB to return existing config
-    db.select = vi.fn().mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: vi.fn().mockImplementation(() => ({
-          limit: vi.fn().mockResolvedValue([{ id: "existing-id" }]),
-        })),
-      })),
+  it("upserts atomically via ON CONFLICT when config already exists", async () => {
+    // Make the onConflictDoUpdate returning() return the existing ID
+    const onConflictReturn = vi.fn().mockReturnValue({
+      returning: vi.fn().mockResolvedValue([{ id: "existing-id" }]),
+    });
+    db.insert = vi.fn().mockImplementation(() => ({
+      values: vi.fn().mockReturnValue({
+        then: (resolve: (v: unknown) => void) => resolve(undefined),
+        onConflictDoUpdate: onConflictReturn,
+      }),
     }));
 
     const sseBody = makeSseResponse(SAMPLE_OUTPUT);
@@ -217,9 +225,9 @@ describe("InterrogationService", () => {
     const result = await service.interrogate("org/app");
     expect(result.repoConfigId).toBe("existing-id");
 
-    // Should have called update (not insert) for config
-    expect(db.update).toHaveBeenCalled();
-    // Should have deleted old gaps
+    // Should use atomic upsert (onConflictDoUpdate), not separate select+update
+    expect(onConflictReturn).toHaveBeenCalled();
+    // Should have deleted old gaps before inserting fresh ones
     expect(db.delete).toHaveBeenCalled();
 
     fetchSpy.mockRestore();

@@ -120,7 +120,7 @@ describe("createInterrogationRoutes", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(svc.linkGapToIssue).toHaveBeenCalledWith("g-1", "https://github.com/org/app/issues/5");
+    expect(svc.linkGapToIssue).toHaveBeenCalledWith("g-1", "org/app", "https://github.com/org/app/issues/5");
   });
 
   it("POST link-issue returns 400 without issue_url", async () => {

@@ -185,73 +185,48 @@ export class InterrogationService {
   }
 
   /**
-   * Store interrogation result in DB. Upserts the repo config and inserts gaps.
+   * Store interrogation result in DB. Atomic upsert via ON CONFLICT to avoid
+   * race conditions when concurrent interrogations target the same repo.
    */
   private async storeResult(repoFullName: string, result: InterrogationResult): Promise<string> {
     const repoConfigId = crypto.randomUUID();
     const now = new Date();
 
-    // Check for existing config (upsert)
-    const existing = await this.db
-      .select({ id: repoConfigs.id })
-      .from(repoConfigs)
-      .where(and(eq(repoConfigs.tenantId, this.tenantId), eq(repoConfigs.repo, repoFullName)))
-      .limit(1);
-
-    if (existing.length > 0) {
-      // Update existing config
-      const existingId = existing[0].id as string;
-      await this.db
-        .update(repoConfigs)
-        .set({
+    // Atomic upsert — ON CONFLICT on (tenant_id, repo) unique index
+    const rows = await this.db
+      .insert(repoConfigs)
+      .values({
+        id: repoConfigId,
+        tenantId: this.tenantId,
+        repo: repoFullName,
+        config: result.config,
+        claudeMd: result.claudeMd,
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [repoConfigs.tenantId, repoConfigs.repo],
+        set: {
           config: result.config,
           claudeMd: result.claudeMd,
           status: "complete",
           updatedAt: now,
-        })
-        .where(eq(repoConfigs.id, existingId));
+        },
+      })
+      .returning({ id: repoConfigs.id });
 
-      // Delete old gaps and insert fresh ones
-      await this.db.delete(repoGaps).where(eq(repoGaps.repoConfigId, existingId));
+    const finalId = (rows[0]?.id as string) ?? repoConfigId;
 
-      if (result.gaps.length > 0) {
-        await this.db.insert(repoGaps).values(
-          result.gaps.map((gap) => ({
-            id: crypto.randomUUID(),
-            tenantId: this.tenantId,
-            repoConfigId: existingId,
-            capability: gap.capability,
-            title: gap.title,
-            priority: gap.priority,
-            description: gap.description,
-            status: "open",
-            createdAt: now,
-          })),
-        );
-      }
+    // Delete old gaps and insert fresh ones
+    await this.db.delete(repoGaps).where(eq(repoGaps.repoConfigId, finalId));
 
-      return existingId;
-    }
-
-    // Insert new config
-    await this.db.insert(repoConfigs).values({
-      id: repoConfigId,
-      tenantId: this.tenantId,
-      repo: repoFullName,
-      config: result.config,
-      claudeMd: result.claudeMd,
-      status: "complete",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    // Insert gaps
     if (result.gaps.length > 0) {
       await this.db.insert(repoGaps).values(
         result.gaps.map((gap) => ({
           id: crypto.randomUUID(),
           tenantId: this.tenantId,
-          repoConfigId,
+          repoConfigId: finalId,
           capability: gap.capability,
           title: gap.title,
           priority: gap.priority,
@@ -262,7 +237,7 @@ export class InterrogationService {
       );
     }
 
-    return repoConfigId;
+    return finalId;
   }
 
   /**
@@ -308,11 +283,25 @@ export class InterrogationService {
 
   /**
    * Mark a gap as having an issue created.
+   * Validates the gap belongs to the specified repo to prevent cross-repo linking.
    */
-  async linkGapToIssue(gapId: string, issueUrl: string): Promise<void> {
-    await this.db
-      .update(repoGaps)
-      .set({ status: "issue_created", issueUrl })
-      .where(and(eq(repoGaps.id, gapId), eq(repoGaps.tenantId, this.tenantId)));
+  async linkGapToIssue(gapId: string, repoFullName: string, issueUrl: string): Promise<void> {
+    // Verify gap belongs to the correct repo
+    const config = await this.getConfig(repoFullName);
+    if (!config) {
+      throw new Error(`No config found for repo ${repoFullName}`);
+    }
+
+    const rows = await this.db
+      .select({ id: repoGaps.id })
+      .from(repoGaps)
+      .where(and(eq(repoGaps.id, gapId), eq(repoGaps.repoConfigId, config.id)))
+      .limit(1);
+
+    if (rows.length === 0) {
+      throw new Error(`Gap ${gapId} not found for repo ${repoFullName}`);
+    }
+
+    await this.db.update(repoGaps).set({ status: "issue_created", issueUrl }).where(eq(repoGaps.id, gapId));
   }
 }
