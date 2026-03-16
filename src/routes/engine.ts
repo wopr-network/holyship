@@ -114,7 +114,7 @@ export function createEngineRoutes(deps: EngineRouteDeps): Hono {
 
   // POST /entities — create entity (admin/testing)
   app.post("/entities", async (c) => {
-    const body = (await c.req.json()) as Record<string, unknown>;
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const flow = (body.flow as string) ?? "engineering";
     const refs = (body.refs as Record<string, unknown>) ?? {};
     const entity = await deps.engine.createEntity(flow, undefined, refs);
