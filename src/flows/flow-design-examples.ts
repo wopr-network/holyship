@@ -25,9 +25,18 @@ export function selectExample(languages: string[]): FlowDesignExample {
     if (example.language === primary) return example;
   }
 
+  // Fuzzy matches
   if (primary.includes("python")) return getExample("python");
-  if (primary.includes("java") || primary.includes("kotlin")) return getExample("java");
+  if (primary === "kotlin") return getExample("kotlin");
+  if (primary.includes("java")) return getExample("java");
   if (primary.includes("ruby")) return getExample("ruby");
+  if (primary.includes("csharp") || primary.includes("c#") || primary === "dotnet") return getExample("csharp");
+  if (primary === "swift") return getExample("swift");
+  if (primary === "php") return getExample("php");
+  if (primary === "elixir" || primary === "erlang") return getExample("elixir");
+  if (primary === "c" || primary === "cpp" || primary === "c++") return getExample("cpp");
+  if (primary === "dart" || primary === "flutter") return getExample("dart");
+  if (primary === "scala") return getExample("java"); // close enough
 
   return getExample("typescript");
 }
@@ -190,6 +199,164 @@ const ADAPTATIONS: LanguageAdaptation[] = [
     mergeCommand: "gh pr merge --squash",
     designNotes:
       "No docs state. Rails-specific: review checks for N+1 queries, mass assignment, reversible migrations. Prompts reference rubocop, rspec with FactoryBot. Code prompt includes rails generate migration for schema changes.",
+  },
+  {
+    language: "csharp",
+    description: "C# .NET API with dotnet format, xUnit, GitHub Actions, has docs, no merge queue",
+    repoExample: "acme/payments-api — C# .NET 8",
+    ciGateCommand: "dotnet format --verify-no-changes && dotnet build --no-restore && dotnet test --no-build",
+    ciGateTimeout: 600000,
+    conventions: `- .NET 8 minimal APIs or controller-based
+- dotnet format enforced (editorconfig rules)
+- xUnit with FluentAssertions
+- Dependency injection via built-in DI container
+- Nullable reference types enabled (no null warnings)
+- If adding packages: dotnet add package <name>`,
+    reviewFocus:
+      "null reference warnings, missing async/await (sync-over-async), DI lifetime issues (scoped vs singleton), missing input validation",
+    docStyle: "XML doc comments on public APIs, docs/ directory",
+    hasDocs: true,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "Kept docs state — has docs/. Prompts reference dotnet format, xUnit, FluentAssertions. Review checks for null reference issues, async anti-patterns, DI lifetime bugs. CI timeout 10 min.",
+  },
+  {
+    language: "swift",
+    description: "Swift iOS app with SwiftLint, XCTest, GitHub Actions, no docs, no merge queue",
+    repoExample: "acme/ios-app — Swift iOS",
+    ciGateCommand: "swiftlint lint --strict && xcodebuild test -scheme App -destination 'platform=iOS Simulator,name=iPhone 16'",
+    ciGateTimeout: 900000,
+    conventions: `- SwiftLint enforced (strict mode)
+- Swift concurrency (async/await, actors) preferred over GCD
+- MVVM architecture
+- XCTest for unit tests, XCUITest for UI tests
+- Swift Package Manager for dependencies`,
+    reviewFocus:
+      "retain cycles (weak/unowned), main thread violations, force unwraps, missing error handling, concurrency safety (@Sendable)",
+    docStyle: "Swift documentation comments (///)",
+    hasDocs: false,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "No docs state. Swift-specific: review checks for retain cycles, main thread violations, force unwraps. CI timeout 15 min — Xcode builds are slow. SwiftLint strict mode. Prompts emphasize async/await over GCD, MVVM pattern.",
+  },
+  {
+    language: "php",
+    description: "PHP Laravel app with PHP CS Fixer, PHPUnit, GitHub Actions, no docs, no merge queue",
+    repoExample: "acme/store-api — PHP Laravel",
+    ciGateCommand: "php-cs-fixer fix --dry-run --diff && php artisan test --parallel",
+    ciGateTimeout: 480000,
+    conventions: `- Laravel conventions (Eloquent, service classes, form requests)
+- PHP CS Fixer for code style (PSR-12)
+- PHPUnit with Laravel test helpers
+- Migrations via php artisan make:migration
+- Type declarations on all method signatures (PHP 8.2+)`,
+    reviewFocus:
+      "SQL injection (raw queries), mass assignment (missing $fillable/$guarded), N+1 queries, missing form request validation, untyped returns",
+    docStyle: "PHPDoc",
+    hasDocs: false,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "No docs state. Laravel-specific: review checks for mass assignment, N+1 queries, SQL injection on raw queries. Prompts reference php-cs-fixer (PSR-12), PHPUnit, Eloquent. CI timeout 8 min.",
+  },
+  {
+    language: "kotlin",
+    description: "Kotlin Spring Boot API with ktlint, Kotest, Gradle, GitHub Actions, no docs, no merge queue",
+    repoExample: "acme/catalog-api — Kotlin Spring Boot",
+    ciGateCommand: "./gradlew ktlintCheck && ./gradlew test && ./gradlew build",
+    ciGateTimeout: 900000,
+    conventions: `- Kotlin idioms (data classes, sealed classes, extension functions)
+- Spring Boot 3 with constructor injection
+- Kotest with BehaviorSpec style
+- ktlint enforced via Gradle plugin
+- Coroutines for async operations (not CompletableFuture)`,
+    reviewFocus:
+      "platform type usage (missing nullability annotations on Java interop), blocking calls in coroutine context, unnecessary mutability (var vs val)",
+    docStyle: "KDoc",
+    hasDocs: false,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "No docs state. Kotlin-specific: review checks for platform types, blocking-in-coroutines, var-vs-val. Prompts reference ktlint, Kotest BehaviorSpec, coroutines. CI timeout 15 min for Gradle.",
+  },
+  {
+    language: "elixir",
+    description: "Elixir Phoenix app with mix format, ExUnit, GitHub Actions, has docs, no merge queue",
+    repoExample: "acme/realtime-api — Elixir Phoenix",
+    ciGateCommand: "mix format --check-formatted && mix credo --strict && mix test",
+    ciGateTimeout: 480000,
+    conventions: `- Phoenix conventions (contexts, schemas, changesets)
+- mix format enforced
+- Credo for static analysis (strict mode)
+- ExUnit with setup/setup_all blocks
+- Pattern matching preferred over conditionals
+- Pipe operator for data transformations`,
+    reviewFocus:
+      "process leaks (unsupervised processes), missing error tuples ({:ok, _}/{:error, _}), changeset validation gaps, missing typespec",
+    docStyle: "@moduledoc and @doc with ExDoc",
+    hasDocs: true,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "Kept docs state — Elixir has strong ExDoc culture. Review checks for process leaks, missing error tuples, changeset gaps. Prompts reference mix format, Credo strict, ExUnit. CI timeout 8 min.",
+  },
+  {
+    language: "cpp",
+    description: "C++ library with clang-tidy, Google Test, CMake, GitHub Actions, no docs, no merge queue",
+    repoExample: "acme/core-lib — C++ library",
+    ciGateCommand: "cmake --build build && cd build && ctest --output-on-failure && cd .. && clang-tidy -p build src/**/*.cpp",
+    ciGateTimeout: 900000,
+    conventions: `- Modern C++ (C++20, RAII, smart pointers)
+- CMake build system
+- Google Test / Google Mock for testing
+- clang-tidy for static analysis
+- No raw new/delete — use std::unique_ptr/std::shared_ptr
+- Header-only where possible for library code`,
+    reviewFocus:
+      "memory safety (raw pointers, manual new/delete), undefined behavior, missing const-correctness, include hygiene, thread safety",
+    docStyle: "Doxygen",
+    hasDocs: false,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "No docs state. C++-specific: review focuses on memory safety, undefined behavior, const-correctness. CI timeout 15 min — C++ builds are slow. Prompts emphasize RAII, smart pointers, modern C++20.",
+  },
+  {
+    language: "dart",
+    description: "Dart Flutter app with dart analyze, flutter test, GitHub Actions, no docs, no merge queue",
+    repoExample: "acme/mobile-app — Dart Flutter",
+    ciGateCommand: "dart analyze --fatal-infos && flutter test --coverage",
+    ciGateTimeout: 600000,
+    conventions: `- Flutter/Dart conventions (Widget composition, BLoC or Riverpod for state)
+- dart analyze with fatal-infos (zero warnings)
+- flutter test for widget and unit tests
+- Effective Dart style guide
+- Immutable state objects
+- If adding packages: flutter pub add <name>`,
+    reviewFocus:
+      "widget rebuild efficiency (unnecessary setState/build), state management leaks, missing null safety, platform-specific code without abstraction",
+    docStyle: "dartdoc (///)",
+    hasDocs: false,
+    hasReviewBots: false,
+    reviewBotNames: "",
+    hasMergeQueue: false,
+    mergeCommand: "gh pr merge --squash",
+    designNotes:
+      "No docs state. Flutter-specific: review checks for unnecessary rebuilds, state management leaks. Prompts reference dart analyze (fatal-infos), flutter test. CI timeout 10 min.",
   },
 ];
 

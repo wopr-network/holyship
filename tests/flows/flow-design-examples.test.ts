@@ -27,8 +27,43 @@ describe("selectExample", () => {
     expect(ex.language).toBe("java");
   });
 
-  it("selects java for kotlin repos", () => {
+  it("selects kotlin for kotlin repos", () => {
     const ex = selectExample(["kotlin"]);
+    expect(ex.language).toBe("kotlin");
+  });
+
+  it("selects csharp for c# repos", () => {
+    const ex = selectExample(["csharp"]);
+    expect(ex.language).toBe("csharp");
+  });
+
+  it("selects swift for swift repos", () => {
+    const ex = selectExample(["swift"]);
+    expect(ex.language).toBe("swift");
+  });
+
+  it("selects php for php repos", () => {
+    const ex = selectExample(["php"]);
+    expect(ex.language).toBe("php");
+  });
+
+  it("selects elixir for elixir repos", () => {
+    const ex = selectExample(["elixir"]);
+    expect(ex.language).toBe("elixir");
+  });
+
+  it("selects cpp for c++ repos", () => {
+    const ex = selectExample(["cpp"]);
+    expect(ex.language).toBe("cpp");
+  });
+
+  it("selects dart for dart repos", () => {
+    const ex = selectExample(["dart"]);
+    expect(ex.language).toBe("dart");
+  });
+
+  it("selects java for scala repos (fuzzy)", () => {
+    const ex = selectExample(["scala"]);
     expect(ex.language).toBe("java");
   });
 
