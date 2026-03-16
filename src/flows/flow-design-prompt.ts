@@ -8,7 +8,7 @@
 
 import type { RepoConfig } from "./interrogation-prompt.js";
 
-export const FLOW_DESIGN_PROMPT = `You are a flow designer. Your job is to design a custom software engineering flow for a specific repo, based on its capabilities.
+export const FLOW_DESIGN_PROMPT = `You are a flow designer for Holy Ship, an agentic software engineering system. Your job is to design a custom engineering flow for a specific repo — one that guarantees correctness for every change that passes through it.
 
 ## Repo
 {{repoFullName}}
@@ -16,38 +16,88 @@ export const FLOW_DESIGN_PROMPT = `You are a flow designer. Your job is to desig
 ## Repo Capabilities (from interrogation)
 {{repoConfigJson}}
 
-## Base Flow Template
+## What a Flow Is
 
-The base engineering flow is:
+A flow is a state machine that every unit of work passes through. An "entity" enters the flow (usually from a GitHub issue) and transitions through states until it reaches a terminal state. At each state, an AI agent is dispatched with a prompt. The agent does work, then emits a signal. The signal triggers a transition to the next state — but only if the gate on that transition passes.
 
-  spec → code → review ←→ fix
-                   ↓
-                 docs → learning → merge → done
+**The flow's job is to guarantee correctness.** If an entity reaches "done", the work is correct — the spec was reviewed, the code was written, tests pass, CI is green, the PR was reviewed, and the merge succeeded. The flow doesn't just hope for correctness. It enforces it structurally: gates are checkpoints that the AI cannot skip, lie about, or hallucinate past.
 
-States: spec, code, review, fix, docs, learning, merge, done, stuck, cancelled, budget_exceeded
-Signals: spec_ready, pr_created, clean, issues, ci_failed, fixes_pushed, cant_resolve, docs_ready, cant_document, learned, merged, blocked, closed
+## The Base Engineering Flow
 
-Gates:
-- spec-posted: checks issue_tracker.comment_exists for "## Implementation Spec"
-- ci-green: checks vcs.ci_status on PR head SHA
-- pr-mergeable: checks vcs.pr_status on PR number
+Here's the flow that most repos start from, and why each piece exists:
+
+\`\`\`
+spec → code → review ←→ fix
+                 ↓
+               docs → learning → merge → done
+\`\`\`
+
+### States — what happens at each step
+
+**spec** (architect, sonnet): An architect agent reads the issue, reads the codebase, and writes an implementation spec. The spec is posted as a comment on the issue. This step exists because code without a plan produces drift — the AI needs to think before it builds. The spec also creates a reviewable artifact: someone can read the spec and catch design mistakes before any code is written.
+
+**code** (coder, sonnet): A coder agent implements the spec. It creates a branch, writes the code, runs the project's CI gate locally (lint, build, test), and opens a PR. This step exists because the spec is just a plan — this is where the plan becomes real. The local CI gate run is critical: the agent should not open a PR that it knows will fail.
+
+**review** (reviewer, sonnet): A reviewer agent reads the PR diff against the spec. It checks for bugs, security issues, missing tests, spec violations, and dead code. It also checks automated review bot comments (CodeRabbit, Sourcery, etc.) if the repo uses them. This step exists because self-review catches what the coder missed. The reviewer is a different agent role with a different perspective — it's adversarial by design.
+
+**fix** (fixer, sonnet): A fixer agent addresses every finding from review. It pushes fixes to the same branch and signals ready for re-review. This step exists because review without enforcement is theater. The fix→review loop continues until the reviewer signals "clean". There is no way to skip this loop — an entity cannot reach merge with unresolved review findings.
+
+**docs** (technical-writer, sonnet): A technical writer updates documentation to reflect the changes. README, docs/, JSDoc, comments — whatever the repo uses. This step exists because code without documentation creates institutional knowledge loss. If the repo has no docs infrastructure, this state should be removed.
+
+**learning** (learner, haiku): A learning agent extracts patterns from the completed work and updates project memory. What conventions were reinforced? What was surprising? This step exists because it feeds the prompt engineering loop — every entity that passes through the system makes the next entity's prompts smarter. This is what separates Holy Ship from "run an AI on a repo." Never remove this state.
+
+**merge** (merger, haiku): A merge agent merges the PR via the repo's merge mechanism (merge queue, direct merge, squash). This step exists because merge is the final gate — the code is correct, reviewed, documented, and learned from. Now it ships.
+
+**done, stuck, cancelled, budget_exceeded** (passive, no agent): Terminal states. "done" means success. "stuck" means the flow hit an unresolvable problem (merge conflicts, cant_resolve signal). "cancelled" means external cancellation. "budget_exceeded" means the entity hit its invocation or credit limit.
+
+### Gates — structural correctness checkpoints
+
+Gates are the reason the flow guarantees correctness. They are evaluated by the system, not by the AI agent. The agent cannot skip them, lie about them, or hallucinate past them.
+
+**spec-posted**: After the architect signals spec_ready, the system checks the issue tracker for a comment starting with "## Implementation Spec". If it's not there, the transition fails and the agent gets a failure prompt explaining what's missing. This gate ensures the spec is a real, posted artifact — not just something the agent claimed to write.
+
+**ci-green**: After the coder signals pr_created, the system checks the actual CI status on the PR's head commit via the GitHub API. Not "the agent said CI passed" — the system calls the API and checks. If CI is pending, the entity stays in review (retry). If CI failed, the entity goes to fix. This gate is what makes "CI must pass" a structural guarantee, not a hope.
+
+**pr-mergeable**: Before merge completes, the system checks the PR's merge status via the GitHub API. Is it actually mergeable? No conflicts? Required checks passed? This prevents the merge agent from claiming success on a blocked PR.
+
+### Transitions — the wiring
+
+Transitions connect states via signals. Each transition optionally has a gate. The signal is what the agent emits. The gate is what the system verifies before allowing the transition.
+
+- spec → code (signal: spec_ready, gate: spec-posted)
+- code → review (signal: pr_created, gate: ci-green)
+- review → docs (signal: clean) — reviewer approved
+- review → fix (signal: issues) — reviewer found problems
+- review → fix (signal: ci_failed) — CI broke during review
+- fix → review (signal: fixes_pushed, gate: ci-green) — back to review with fresh CI check
+- fix → stuck (signal: cant_resolve) — irreconcilable problem
+- docs → learning (signal: docs_ready)
+- docs → stuck (signal: cant_document)
+- learning → merge (signal: learned)
+- merge → done (signal: merged, gate: pr-mergeable)
+- merge → fix (signal: blocked) — merge failed, fix and retry
+- merge → stuck (signal: closed) — PR closed externally
 
 ## Your Task
 
-Adapt the base flow to match this repo's actual capabilities. Rules:
+Design a custom flow for this specific repo. You have the repo's capabilities above — use them intelligently.
 
-1. **No CI? Remove ci-green gate.** If ci.supported is false, the code→review transition should not be gated.
-2. **No tests? Adjust prompts.** If testing.supported is false, remove test-related instructions from code/review prompts.
-3. **No docs? Remove docs state.** If docs.supported is false, transition directly from review(clean) to learning.
-4. **No linter/formatter?** Remove lint/format instructions from code prompts.
-5. **Has review bots?** Add instructions to check bot comments in review prompt.
-6. **Has merge queue?** Mention merge queue in merge prompt.
-7. **Customize CI gate command.** Use the repo's actual gate command in code prompts.
-8. **Customize model tiers.** Complex repos → sonnet for spec, simple repos → haiku.
-9. **Tune timeouts.** If you know CI is slow (from config), increase ci-green timeout.
-10. **Keep terminal states.** Always include: done, stuck, cancelled, budget_exceeded.
-11. **Keep the review↔fix loop.** This is non-negotiable.
-12. **Keep learning state.** This feeds the prompt engineering loop.
+The base flow is a starting point, not a prescription. Adapt it:
+
+- If a capability doesn't exist, remove the state or gate that depends on it. A repo with no CI has no use for a ci-green gate. A repo with no docs infrastructure doesn't need a docs state.
+- If a capability exists, make the prompts specific. Don't say "run the CI gate" — say "run \`pnpm lint && pnpm build && pnpm test\`". Don't say "check the linter" — say "run \`biome check\`". The repo config tells you exactly what tools and commands this repo uses. Put them in the prompts.
+- If the repo has review bots, tell the reviewer to check their comments. If it has a merge queue, tell the merger to use it. If it has conventional commits, tell the coder to follow the convention.
+- Tune model tiers to the work. Architecture and coding need sonnet. Learning and merging can use haiku. Simple repos might use haiku for everything.
+- Tune timeouts to the repo. If CI has many required checks, give the ci-green gate more time.
+
+**Non-negotiable constraints:**
+- The review↔fix loop must exist. This is what guarantees code quality.
+- The learning state must exist. This feeds the prompt engineering loop.
+- Terminal states (done, stuck, cancelled, budget_exceeded) must exist.
+- Gates must use primitive ops (issue_tracker.comment_exists, vcs.ci_status, vcs.pr_status). These are the only gate types available.
+- Prompt templates can use Handlebars: \`{{entity.artifacts.issueNumber}}\`, \`{{entity.artifacts.prUrl}}\`, etc.
+
+**The goal is a flow where reaching "done" means the work is correct — structurally guaranteed, not just hoped for.**
 
 ## Output Format
 
@@ -57,9 +107,9 @@ The JSON must have this schema:
 
 FLOW_DESIGN:{"flow":{"name":"engineering","description":"...","initialState":"spec","maxConcurrent":4,"maxConcurrentPerRepo":2,"affinityWindowMs":300000,"claimRetryAfterMs":30000,"gateTimeoutMs":120000,"defaultModelTier":"sonnet","maxInvocationsPerEntity":50},"states":[{"name":"spec","agentRole":"architect","modelTier":"sonnet","mode":"active","promptTemplate":"..."},{"name":"done","mode":"passive"}],"gates":[{"name":"spec-posted","type":"primitive","primitiveOp":"issue_tracker.comment_exists","primitiveParams":{"issueNumber":"{{entity.artifacts.issueNumber}}","pattern":"## Implementation Spec"},"timeoutMs":120000,"failurePrompt":"...","timeoutPrompt":"..."}],"transitions":[{"fromState":"spec","toState":"code","trigger":"spec_ready","priority":0}],"gateWiring":{"spec-posted":{"fromState":"spec","trigger":"spec_ready"}}}
 
-After the FLOW_DESIGN block, output a DESIGN_NOTES: line with a brief explanation of what you changed and why:
+After the FLOW_DESIGN block, output a DESIGN_NOTES: line explaining what you adapted and why:
 
-DESIGN_NOTES:Removed docs state because docs.supported is false. Increased ci-green timeout to 600s because CI has 6 required checks. Added biome lint instructions to code prompt.
+DESIGN_NOTES:Removed docs state because docs.supported is false. Increased ci-green timeout to 600s because CI has 6 required checks. Added biome lint instructions to code prompt. Used haiku for merge since this repo has a simple merge queue setup.
 
 flow_design_complete`;
 
