@@ -254,7 +254,8 @@ const ADAPTATIONS: LanguageAdaptation[] = [
     language: "swift",
     description: "Swift iOS app with SwiftLint, XCTest, GitHub Actions, no docs, no merge queue",
     repoExample: "acme/ios-app — Swift iOS",
-    ciGateCommand: "swiftlint lint --strict && xcodebuild test -scheme App -destination 'platform=iOS Simulator,name=iPhone 16'",
+    ciGateCommand:
+      "swiftlint lint --strict && xcodebuild test -scheme App -destination 'platform=iOS Simulator,name=iPhone 16'",
     ciGateTimeout: 900000,
     conventions: `- SwiftLint enforced (strict mode)
 - Swift concurrency (async/await, actors) preferred over GCD
@@ -355,7 +356,8 @@ const ADAPTATIONS: LanguageAdaptation[] = [
     language: "cpp",
     description: "C++ library with clang-tidy, Google Test, CMake, GitHub Actions, no docs, no merge queue",
     repoExample: "acme/core-lib — C++ library",
-    ciGateCommand: "cmake --build build && cd build && ctest --output-on-failure && cd .. && clang-tidy -p build src/**/*.cpp",
+    ciGateCommand:
+      "cmake --build build && cd build && ctest --output-on-failure && cd .. && clang-tidy -p build src/**/*.cpp",
     ciGateTimeout: 900000,
     conventions: `- Modern C++ (C++20, RAII, smart pointers)
 - CMake build system
