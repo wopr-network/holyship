@@ -328,6 +328,51 @@ async function main() {
       }
     });
 
+    app.get("/api/github/issues", async (c) => {
+      const repo = c.req.query("repo");
+      if (!repo) {
+        return c.json({ issues: [], error: "Missing repo query parameter" }, 400);
+      }
+      try {
+        const installations = await installationRepo.listByTenant(tenantId);
+        if (installations.length === 0) {
+          return c.json({ issues: [] });
+        }
+        const { token } = await getInstallationAccessToken(
+          config.GITHUB_APP_ID as string,
+          config.GITHUB_APP_PRIVATE_KEY as string,
+          installations[0].installationId,
+        );
+        const res = await fetch(
+          `https://api.github.com/repos/${repo}/issues?state=open&per_page=50&sort=created&direction=desc`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+          },
+        );
+        if (!res.ok) {
+          return c.json({ issues: [], error: `GitHub API ${res.status}` }, 502);
+        }
+        const issues = (await res.json()) as {
+          number: number;
+          title: string;
+          labels: { name: string; color: string }[];
+          created_at: string;
+          html_url: string;
+          pull_request?: unknown;
+        }[];
+        // Filter out pull requests (GitHub returns PRs as issues)
+        const realIssues = issues.filter((i) => !i.pull_request);
+        return c.json({ issues: realIssues });
+      } catch (err) {
+        logger.error("Failed to list issues", (err as Error).message);
+        return c.json({ issues: [], error: (err as Error).message }, 500);
+      }
+    });
+
     app.post("/api/github/sync-installations", async (c) => {
       try {
         const { generateAppJwt } = await import("./github/token-generator.js");
