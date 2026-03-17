@@ -31,6 +31,7 @@ import type { Entity } from "./repositories/interfaces.js";
 import { createScopedRepos } from "./repositories/scoped-repos.js";
 import { createEngineRoutes } from "./routes/engine.js";
 import { createFlowEditorRoutes } from "./routes/flow-editor.js";
+import { createInterrogationRoutes } from "./routes/interrogation.js";
 
 // ---------------------------------------------------------------------------
 // Notification worker handle (for graceful shutdown)
@@ -520,25 +521,83 @@ async function main() {
     logger.info("GitHub repos endpoint mounted");
   }
 
-  // ─── 12c. Flow editor routes (read/write .holyship/flow.yml) ────────
-  if (hasGitHubApp) {
+  // ─── 12c+12d. Flow editor + interrogation routes ────────────────────
+  {
+    const { InterrogationService } = await import("./flows/interrogation-service.js");
+    const { GapActualizationService } = await import("./flows/gap-actualization-service.js");
+    const { FlowDesignService } = await import("./flows/flow-design-service.js");
+
+    const getGithubToken = async (): Promise<string | null> => {
+      if (!hasGitHubApp) return null;
+      const installations = await installationRepo.listByTenant(tenantId);
+      if (installations.length === 0) return null;
+      const installation = installations[0];
+      if (!installation.accessToken || !installation.tokenExpiresAt || installation.tokenExpiresAt < new Date()) {
+        const { token, expiresAt } = await getInstallationAccessToken(
+          config.GITHUB_APP_ID as string,
+          config.GITHUB_APP_PRIVATE_KEY as string,
+          installation.installationId,
+        );
+        await installationRepo.updateToken(installation.installationId, token, expiresAt);
+        return token;
+      }
+      return installation.accessToken;
+    };
+
+    // fleetManager is only used by interrogate() — gap creation never calls it.
+    const noopFleet: import("./fleet/provision-holyshipper.js").IFleetManager = {
+      provision: () => Promise.reject(new Error("Fleet not configured")),
+      teardown: () => Promise.resolve(),
+    };
+
+    const interrogationService = new InterrogationService({
+      db: engineDb,
+      tenantId,
+      fleetManager: noopFleet,
+      getGithubToken,
+    });
+
+    const gapActualizationService = new GapActualizationService({
+      interrogationService,
+      engine,
+      getGithubToken,
+    });
+
+    const flowDesignService = new FlowDesignService({
+      interrogationService,
+      gatewayUrl: config.APP_BASE_URL ? `${config.APP_BASE_URL}/v1` : "http://localhost:3001/v1",
+      platformServiceKey: config.HOLYSHIP_PLATFORM_SERVICE_KEY ?? config.HOLYSHIP_GATEWAY_KEY ?? "",
+    });
+
+    if (hasGitHubApp) {
+      app.route(
+        "/api",
+        createFlowEditorRoutes({
+          getGithubToken: async () => {
+            const installations = await installationRepo.listByTenant(tenantId);
+            if (installations.length === 0) return null;
+            const { token } = await getInstallationAccessToken(
+              config.GITHUB_APP_ID as string,
+              config.GITHUB_APP_PRIVATE_KEY as string,
+              installations[0].installationId,
+            );
+            return token;
+          },
+          flowEditService,
+          flowDesignService,
+        }),
+      );
+      logger.info("Flow editor routes mounted");
+    }
+
     app.route(
       "/api",
-      createFlowEditorRoutes({
-        getGithubToken: async () => {
-          const installations = await installationRepo.listByTenant(tenantId);
-          if (installations.length === 0) return null;
-          const { token } = await getInstallationAccessToken(
-            config.GITHUB_APP_ID as string,
-            config.GITHUB_APP_PRIVATE_KEY as string,
-            installations[0].installationId,
-          );
-          return token;
-        },
-        flowEditService,
+      createInterrogationRoutes({
+        interrogationService,
+        gapActualizationService,
       }),
     );
-    logger.info("Flow editor routes mounted");
+    logger.info("Interrogation routes mounted");
   }
 
   // ─── 13. Crypto payments (BTCPay + EVM watchers) ────────────────────

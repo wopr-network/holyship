@@ -1,12 +1,11 @@
 /**
  * Flow Design Service — AI designs a custom flow for a repo.
  *
- * Takes the RepoConfig from interrogation + the engineering flow template,
- * dispatches to a runner, and produces a custom flow definition. The result
- * can be provisioned into the flow engine.
+ * Takes the RepoConfig from interrogation and calls the gateway directly
+ * (same pattern as FlowEditService — no runner provisioning needed).
+ * Produces a custom flow definition that can be provisioned into the flow engine.
  */
 
-import type { IFleetManager, ProvisionConfig } from "../fleet/provision-holyshipper.js";
 import { logger } from "../logger.js";
 import type {
   CreateFlowInput,
@@ -19,10 +18,9 @@ import type { InterrogationService } from "./interrogation-service.js";
 
 export interface FlowDesignServiceConfig {
   interrogationService: InterrogationService;
-  fleetManager: IFleetManager;
-  getGithubToken: () => Promise<string | null>;
-  tenantId: string;
-  dispatchTimeoutMs?: number;
+  gatewayUrl: string;
+  platformServiceKey: string;
+  model?: string;
 }
 
 export interface DesignedFlow {
@@ -36,15 +34,15 @@ export interface DesignedFlow {
 
 export class FlowDesignService {
   private readonly interrogationService: InterrogationService;
-  private readonly fleetManager: IFleetManager;
-  private readonly getGithubToken: () => Promise<string | null>;
-  private readonly dispatchTimeoutMs: number;
+  private readonly gatewayUrl: string;
+  private readonly platformServiceKey: string;
+  private readonly model: string;
 
   constructor(config: FlowDesignServiceConfig) {
     this.interrogationService = config.interrogationService;
-    this.fleetManager = config.fleetManager;
-    this.getGithubToken = config.getGithubToken;
-    this.dispatchTimeoutMs = config.dispatchTimeoutMs ?? 600_000;
+    this.gatewayUrl = config.gatewayUrl;
+    this.platformServiceKey = config.platformServiceKey;
+    this.model = config.model ?? "claude-sonnet-4-20250514";
   }
 
   /**
@@ -59,75 +57,46 @@ export class FlowDesignService {
       throw new Error(`No repo config found for ${repoFullName}. Run interrogation first.`);
     }
 
-    const [owner = "", repo = ""] = repoFullName.split("/");
-    if (!owner || !repo) {
-      throw new Error(`Invalid repo name: ${repoFullName}`);
-    }
-
     // Render prompt
     const prompt = renderFlowDesignPrompt(repoFullName, configResult.config);
 
-    // Get GitHub token
-    let githubToken = "";
-    try {
-      githubToken = (await this.getGithubToken()) ?? "";
-    } catch (err) {
-      logger.warn(`${tag} github token failed`, { error: String(err) });
+    logger.info(`${tag} calling gateway`, { repo: repoFullName, promptLength: prompt.length });
+
+    const res = await fetch(`${this.gatewayUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.platformServiceKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Gateway call failed: HTTP ${res.status} — ${text.slice(0, 500)}`);
     }
 
-    // Provision runner
-    const entityId = `flow-design-${crypto.randomUUID()}`;
-    const provisionConfig: ProvisionConfig = {
-      entityId,
-      flowName: "flow-design",
-      owner,
-      repo,
-      issueNumber: 0,
-      githubToken,
-    };
-
-    logger.info(`${tag} provisioning runner`, { repo: repoFullName });
-    const { containerId, runnerUrl } = await this.fleetManager.provision(entityId, provisionConfig);
-
-    try {
-      // Dispatch prompt
-      logger.info(`${tag} dispatching`, { repo: repoFullName, promptLength: prompt.length });
-      const res = await fetch(`${runnerUrl.replace(/\/$/, "")}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, modelTier: "sonnet" }),
-        signal: AbortSignal.timeout(this.dispatchTimeoutMs),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Dispatch failed: HTTP ${res.status} — ${text.slice(0, 500)}`);
-      }
-
-      // Parse SSE response
-      const body = await res.text();
-      const rawOutput = this.extractOutputFromSSE(body);
-
-      logger.info(`${tag} parsing output`, { repo: repoFullName, outputLength: rawOutput.length });
-      const result = parseFlowDesignOutput(rawOutput);
-
-      logger.info(`${tag} complete`, {
-        repo: repoFullName,
-        stateCount: result.design.states.length,
-        gateCount: result.design.gates.length,
-        transitionCount: result.design.transitions.length,
-        notes: result.notes,
-      });
-
-      return this.toDesignedFlow(result);
-    } finally {
-      logger.info(`${tag} tearing down runner`, { containerId: containerId.slice(0, 12) });
-      try {
-        await this.fleetManager.teardown(containerId);
-      } catch (err) {
-        logger.warn(`${tag} teardown failed`, { error: String(err) });
-      }
+    const data = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+    const content = data.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error("Gateway returned empty content");
     }
+
+    logger.info(`${tag} parsing output`, { repo: repoFullName, outputLength: content.length });
+    const result = parseFlowDesignOutput(content);
+
+    logger.info(`${tag} complete`, {
+      repo: repoFullName,
+      stateCount: result.design.states.length,
+      gateCount: result.design.gates.length,
+      transitionCount: result.design.transitions.length,
+      notes: result.notes,
+    });
+
+    return this.toDesignedFlow(result);
   }
 
   /**
@@ -178,37 +147,5 @@ export class FlowDesignService {
     }));
 
     return { flow, states, gates, transitions, gateWiring: design.gateWiring, notes };
-  }
-
-  private extractOutputFromSSE(body: string): string {
-    const sseEvents = body
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => {
-        try {
-          return JSON.parse(line.slice(5)) as Record<string, unknown>;
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean) as Array<Record<string, unknown>>;
-
-    const resultEvent = sseEvents.find((e) => e.type === "result");
-    if (resultEvent) {
-      const artifacts = resultEvent.artifacts as Record<string, unknown> | undefined;
-      if (artifacts?.output && typeof artifacts.output === "string") return artifacts.output;
-      if (resultEvent.text && typeof resultEvent.text === "string") return resultEvent.text;
-    }
-
-    const textParts: string[] = [];
-    for (const event of sseEvents) {
-      if (event.type === "content" || event.type === "text") {
-        const text = (event.text ?? event.content ?? "") as string;
-        if (text) textParts.push(text);
-      }
-    }
-
-    if (textParts.length > 0) return textParts.join("");
-    throw new Error("No usable output found in SSE stream");
   }
 }
