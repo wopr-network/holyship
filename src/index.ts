@@ -391,12 +391,17 @@ async function main() {
           if (!hasGitHubApp) return null;
           const installations = await installationRepo.listByTenant(tenantId);
           if (installations.length === 0) return null;
-          const { token } = await getInstallationAccessToken(
-            config.GITHUB_APP_ID as string,
-            config.GITHUB_APP_PRIVATE_KEY as string,
-            installations[0].installationId,
-          );
-          return token;
+          const installation = installations[0];
+          if (!installation.accessToken || !installation.tokenExpiresAt || installation.tokenExpiresAt < new Date()) {
+            const { token, expiresAt } = await getInstallationAccessToken(
+              config.GITHUB_APP_ID as string,
+              config.GITHUB_APP_PRIVATE_KEY as string,
+              installation.installationId,
+            );
+            await installationRepo.updateToken(installation.installationId, token, expiresAt);
+            return token;
+          }
+          return installation.accessToken;
         },
         poolSize: 4,
       });
@@ -434,11 +439,19 @@ async function main() {
         if (installations.length === 0) {
           throw new Error("No GitHub App installations found");
         }
-        const { token } = await getInstallationAccessToken(
-          config.GITHUB_APP_ID as string,
-          config.GITHUB_APP_PRIVATE_KEY as string,
-          installations[0].installationId,
-        );
+        const installation = installations[0];
+        let token: string;
+        if (!installation.accessToken || !installation.tokenExpiresAt || installation.tokenExpiresAt < new Date()) {
+          const result = await getInstallationAccessToken(
+            config.GITHUB_APP_ID as string,
+            config.GITHUB_APP_PRIVATE_KEY as string,
+            installation.installationId,
+          );
+          await installationRepo.updateToken(installation.installationId, result.token, result.expiresAt);
+          token = result.token;
+        } else {
+          token = installation.accessToken;
+        }
         const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -463,12 +476,17 @@ async function main() {
         getGithubToken: async () => {
           const installations = await installationRepo.listByTenant(tenantId);
           if (installations.length === 0) return null;
-          const { token } = await getInstallationAccessToken(
-            config.GITHUB_APP_ID as string,
-            config.GITHUB_APP_PRIVATE_KEY as string,
-            installations[0].installationId,
-          );
-          return token;
+          const installation = installations[0];
+          if (!installation.accessToken || !installation.tokenExpiresAt || installation.tokenExpiresAt < new Date()) {
+            const { token, expiresAt } = await getInstallationAccessToken(
+              config.GITHUB_APP_ID as string,
+              config.GITHUB_APP_PRIVATE_KEY as string,
+              installation.installationId,
+            );
+            await installationRepo.updateToken(installation.installationId, token, expiresAt);
+            return token;
+          }
+          return installation.accessToken;
         },
       }),
     );
