@@ -1,128 +1,79 @@
 /**
  * Flow Edit Service — AI edits an existing flow via natural language.
  *
- * Provisions a runner, dispatches the flow-edit prompt, parses the structured
- * output, and returns the updated YAML with explanation and diff.
+ * Calls the gateway directly (no runner provisioning needed — flow editing is
+ * a stateless prompt with no repo access required).
  */
 
-import type { IFleetManager, ProvisionConfig } from "../fleet/provision-holyshipper.js";
 import { logger } from "../logger.js";
 import { type FlowEditResult, parseFlowEditOutput, renderFlowEditPrompt } from "./flow-edit-prompt.js";
 
 export interface FlowEditServiceConfig {
-  fleetManager: IFleetManager;
-  getGithubToken: () => Promise<string | null>;
-  /** Dispatch timeout in ms. Default 600_000 (10 min). */
-  dispatchTimeoutMs?: number;
+  gatewayUrl: string;
+  platformServiceKey: string;
+  model?: string;
 }
 
 export class FlowEditService {
-  private readonly fleetManager: IFleetManager;
-  private readonly getGithubToken: () => Promise<string | null>;
-  private readonly dispatchTimeoutMs: number;
+  private readonly gatewayUrl: string;
+  private readonly platformServiceKey: string;
+  private readonly model: string;
 
   constructor(config: FlowEditServiceConfig) {
-    this.fleetManager = config.fleetManager;
-    this.getGithubToken = config.getGithubToken;
-    this.dispatchTimeoutMs = config.dispatchTimeoutMs ?? 600_000;
+    this.gatewayUrl = config.gatewayUrl;
+    this.platformServiceKey = config.platformServiceKey;
+    this.model = config.model ?? "claude-sonnet-4-20250514";
   }
 
   /**
-   * Edit a flow via natural language. Provisions a runner, dispatches the
-   * flow-edit prompt, and returns the updated YAML with explanation and diff.
+   * Edit a flow via natural language. Calls the gateway directly and returns
+   * the updated YAML with explanation and diff.
    */
-  async editFlow(repoFullName: string, message: string, currentYaml: string): Promise<FlowEditResult> {
+  async editFlow(
+    repoFullName: string,
+    message: string,
+    currentYaml: string,
+    attributeTenantId?: string,
+  ): Promise<FlowEditResult> {
     const tag = "[flow-edit]";
     logger.info(`${tag} starting`, { repo: repoFullName });
 
-    const [owner = "", repo = ""] = repoFullName.split("/");
-    if (!owner || !repo) {
-      throw new Error(`Invalid repo name: ${repoFullName}. Expected "owner/repo".`);
-    }
-
     const prompt = renderFlowEditPrompt(currentYaml, message);
 
-    let githubToken = "";
-    try {
-      githubToken = (await this.getGithubToken()) ?? "";
-    } catch (err) {
-      logger.warn(`${tag} github token failed`, { error: String(err) });
-    }
+    logger.info(`${tag} calling gateway`, { repo: repoFullName, promptLength: prompt.length });
 
-    const entityId = `flow-edit-${crypto.randomUUID()}`;
-    const provisionConfig: ProvisionConfig = {
-      entityId,
-      flowName: "flow-edit",
-      owner,
-      repo,
-      issueNumber: 0,
-      githubToken,
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${this.platformServiceKey}`,
     };
-
-    logger.info(`${tag} provisioning runner`, { repo: repoFullName });
-    const { containerId, runnerUrl } = await this.fleetManager.provision(entityId, provisionConfig);
-
-    try {
-      logger.info(`${tag} dispatching`, { repo: repoFullName, promptLength: prompt.length });
-      const res = await fetch(`${runnerUrl.replace(/\/$/, "")}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, modelTier: "sonnet" }),
-        signal: AbortSignal.timeout(this.dispatchTimeoutMs),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Dispatch failed: HTTP ${res.status} — ${text.slice(0, 500)}`);
-      }
-
-      const body = await res.text();
-      const rawOutput = this.extractOutputFromSSE(body);
-
-      logger.info(`${tag} parsing output`, { repo: repoFullName, outputLength: rawOutput.length });
-      const result = parseFlowEditOutput(rawOutput);
-
-      logger.info(`${tag} complete`, { repo: repoFullName, diffCount: result.diff.length });
-      return result;
-    } finally {
-      logger.info(`${tag} tearing down runner`, { containerId: containerId.slice(0, 12) });
-      try {
-        await this.fleetManager.teardown(containerId);
-      } catch (err) {
-        logger.warn(`${tag} teardown failed`, { error: String(err) });
-      }
-    }
-  }
-
-  private extractOutputFromSSE(body: string): string {
-    const sseEvents = body
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => {
-        try {
-          return JSON.parse(line.slice(5)) as Record<string, unknown>;
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean) as Array<Record<string, unknown>>;
-
-    const resultEvent = sseEvents.find((e) => e.type === "result");
-    if (resultEvent) {
-      const artifacts = resultEvent.artifacts as Record<string, unknown> | undefined;
-      if (artifacts?.output && typeof artifacts.output === "string") return artifacts.output;
-      if (resultEvent.text && typeof resultEvent.text === "string") return resultEvent.text;
+    if (attributeTenantId) {
+      headers["X-Attribute-To"] = attributeTenantId;
     }
 
-    const textParts: string[] = [];
-    for (const event of sseEvents) {
-      if (event.type === "content" || event.type === "text") {
-        const text = (event.text ?? event.content ?? "") as string;
-        if (text) textParts.push(text);
-      }
+    const res = await fetch(`${this.gatewayUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: this.model,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Gateway call failed: HTTP ${res.status} — ${text.slice(0, 500)}`);
     }
 
-    if (textParts.length > 0) return textParts.join("");
-    throw new Error("No usable output found in SSE stream");
+    const data = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+    const content = data.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error("Gateway returned empty content");
+    }
+
+    logger.info(`${tag} parsing output`, { repo: repoFullName, outputLength: content.length });
+    const result = parseFlowEditOutput(content);
+
+    logger.info(`${tag} complete`, { repo: repoFullName, diffCount: result.diff.length });
+    return result;
   }
 }

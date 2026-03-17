@@ -43,6 +43,9 @@ const envSchema = z.object({
   HOLYSHIP_GATEWAY_KEY: optStr,
   DOCKER_NETWORK: optStr,
 
+  // Platform service key for direct gateway calls (e.g. flow editing)
+  HOLYSHIP_PLATFORM_SERVICE_KEY: optStr,
+
   // Notifications (Resend)
   RESEND_API_KEY: optStr,
   FROM_EMAIL: z.string().default("noreply@holyship.wtf"),

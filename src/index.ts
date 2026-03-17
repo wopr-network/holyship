@@ -361,8 +361,14 @@ async function main() {
   // Start reaper
   const stopReaper = engine.startReaper(30_000);
 
-  // ─── 9b. Reactive worker pool (ephemeral holyshipper containers) ───
-  let flowEditService: FlowEditService | undefined;
+  // ─── 9b. FlowEditService (direct gateway call — no runner needed) ───
+  const { FlowEditService } = await import("./flows/flow-edit-service.js");
+  const flowEditService: FlowEditService = new FlowEditService({
+    gatewayUrl: config.APP_BASE_URL ? `${config.APP_BASE_URL}/v1` : "http://localhost:3001/v1",
+    platformServiceKey: config.HOLYSHIP_PLATFORM_SERVICE_KEY ?? config.HOLYSHIP_GATEWAY_KEY ?? "",
+  });
+
+  // ─── 9c. Reactive worker pool (ephemeral holyshipper containers) ───
   if (config.HOLYSHIP_WORKER_IMAGE && config.HOLYSHIP_GATEWAY_KEY) {
     try {
       const Docker = (await import("dockerode")).default;
@@ -380,22 +386,6 @@ async function main() {
         gatewayUrl: config.APP_BASE_URL ? `${config.APP_BASE_URL}/v1` : "http://localhost:3001/v1",
         gatewayKey: config.HOLYSHIP_GATEWAY_KEY,
         network: config.DOCKER_NETWORK,
-      });
-
-      const { FlowEditService } = await import("./flows/flow-edit-service.js");
-      flowEditService = new FlowEditService({
-        fleetManager: holyshipperFleet,
-        getGithubToken: async () => {
-          if (!hasGitHubApp) return null;
-          const installations = await installationRepo.listByTenant(tenantId);
-          if (installations.length === 0) return null;
-          const { token } = await getInstallationAccessToken(
-            config.GITHUB_APP_ID as string,
-            config.GITHUB_APP_PRIVATE_KEY as string,
-            installations[0].installationId,
-          );
-          return token;
-        },
       });
 
       const { WorkerPool } = await import("./fleet/worker-pool.js");
