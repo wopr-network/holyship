@@ -42,6 +42,11 @@ export function createFlowEditorRoutes(deps: FlowEditorRouteDeps): Hono {
   app.post("/repos/:owner/:repo/flow/edit", async (c) => {
     const owner = c.req.param("owner");
     const repo = c.req.param("repo");
+
+    if (!/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo)) {
+      return c.json({ error: "Invalid owner or repo name" }, 400);
+    }
+
     const repoFullName = `${owner}/${repo}`;
 
     let body: Record<string, unknown>;
