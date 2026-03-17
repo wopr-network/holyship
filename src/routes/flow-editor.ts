@@ -6,11 +6,13 @@
 
 import { Hono } from "hono";
 import { parse as parseYaml } from "yaml";
+import type { DesignedFlow, FlowDesignService } from "../flows/flow-design-service.js";
 import type { FlowEditService } from "../flows/flow-edit-service.js";
 
 export interface FlowEditorRouteDeps {
   getGithubToken: () => Promise<string | null>;
   flowEditService?: FlowEditService;
+  flowDesignService?: FlowDesignService;
 }
 
 export function createFlowEditorRoutes(deps: FlowEditorRouteDeps): Hono {
@@ -231,6 +233,27 @@ export function createFlowEditorRoutes(deps: FlowEditorRouteDeps): Hono {
 
     const prData = (await prRes.json()) as { html_url: string; number: number };
     return c.json({ prUrl: prData.html_url, prNumber: prData.number, branch }, 200);
+  });
+
+  // POST /repos/:owner/:repo/design-flow — AI-designed initial flow from repo config
+  app.post("/repos/:owner/:repo/design-flow", async (c) => {
+    if (!deps.flowDesignService) {
+      return c.json({ error: "Flow design service not configured" }, 501);
+    }
+
+    const owner = c.req.param("owner");
+    const repo = c.req.param("repo");
+
+    try {
+      const result: DesignedFlow = await deps.flowDesignService.designFlow(`${owner}/${repo}`);
+      return c.json(result, 200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("No repo config found")) {
+        return c.json({ error: message }, 404);
+      }
+      return c.json({ error: "Flow design failed", detail: message }, 500);
+    }
   });
 
   return app;
