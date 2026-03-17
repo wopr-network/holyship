@@ -8,6 +8,8 @@
  * Flow graph:
  *
  *   spec → code → review ←→ fix → docs → merge → done
+ *                                          ↕
+ *                                         fix (blocked loop)
  *
  * Learning is implicit — every agent gets a "what did you learn?" prompt
  * after signaling done, before container teardown. Updates knowledge.md
